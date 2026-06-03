@@ -1,24 +1,21 @@
-# Stage 0, "build-stage", based on Bun, to build and compile the frontend
-FROM oven/bun:1 AS build-stage
-
-WORKDIR /app
-
-COPY package.json bun.lock /app/
-
-COPY frontend/package.json /app/frontend/
+# Stage 0, build and compile the frontend
+FROM node:22-alpine AS build-stage
 
 WORKDIR /app/frontend
 
-RUN bun install
+COPY frontend/package.json frontend/package-lock.json ./
+
+RUN npm ci
 
 COPY ./frontend /app/frontend
-ARG VITE_API_URL
+ARG VITE_API_URL=http://localhost:8000
+ENV VITE_API_URL=$VITE_API_URL
 
-RUN bun run build
+RUN npm run build
 
 
 # Stage 1, based on Nginx, to have only the compiled app, ready for production with Nginx
-FROM nginx:1
+FROM nginx:1-alpine
 
 COPY --from=build-stage /app/frontend/dist/ /usr/share/nginx/html
 

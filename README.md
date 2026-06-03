@@ -6,7 +6,7 @@ Quality-first image object removal demo based on `fastapi/full-stack-fastapi-tem
 
 - Backend: FastAPI, SQLModel, PostgreSQL, JWT auth, Alembic.
 - Frontend: React, Vite, TanStack Router, Tailwind CSS, shadcn-style components.
-- Local orchestration: Docker Compose from the FastAPI full-stack template.
+- Local orchestration: one Docker Compose file for the local full stack.
 - AI tooling: project-scoped MCP configs for opencode, Codex, and Antigravity.
 
 ## Cleanup Decisions
@@ -18,7 +18,7 @@ Quality-first image object removal demo based on `fastapi/full-stack-fastapi-tem
 
 ## Local Environment
 
-Create a local env file from the example:
+Optional: create a local env file from the example if you want to override defaults:
 
 ```bash
 cp .env.example .env
@@ -27,7 +27,7 @@ cp .env.example .env
 Start the full stack:
 
 ```bash
-docker compose -f compose.yml -f compose.override.yml up --build
+docker compose up --build
 ```
 
 Useful local URLs:
