@@ -12,7 +12,7 @@ Muc tieu demo:
 - Cho phep preview va chinh mask.
 - Tai tao vung bi xoa bang model inpainting chat luong cao.
 - Tra ve anh ket qua va luu lich su ket qua.
-- Deploy len AWS de co link demo that.
+- Deploy len Kubernetes (minikube local) de co moi truong production-like.
 
 ## 2. Quyet Dinh Model
 
@@ -291,31 +291,32 @@ Vi demo nho va uu tien chat luong, khong can phuc tap hoa bang microservices day
 Kien truc de xuat:
 
 ```text
-Frontend Next.js
+Frontend Vite + React
 -> FastAPI Backend
 -> GPU Worker cung container hoac process rieng
--> S3 luu anh
+-> MinIO/S3 luu anh
 -> SQLite/PostgreSQL luu job metadata
 ```
 
 Ban local:
 
 ```text
-Next.js frontend
+Vite + React frontend
 FastAPI backend
 Python worker
 Local filesystem hoac MinIO
+Docker Compose
 ```
 
-Ban AWS demo:
+Ban K8s (minikube local):
 
 ```text
-CloudFront/Vercel frontend
-EC2 GPU instance chay Docker Compose
-S3 bucket luu anh
-PostgreSQL managed hoac SQLite tren EC2 neu demo rat nho
-Nginx reverse proxy
-HTTPS bang ACM/CloudFront hoac Caddy
+Frontend (Deployment + Service)
+Backend API (Deployment + Service)
+GPU Worker (Deployment voi nodeSelector GPU)
+MinIO (StatefulSet luu anh)
+SQLite/PostgreSQL (StatefulSet hoac PersistentVolume)
+Ingress (minikube tunnel hoac ingress-nginx)
 ```
 
 ## 6. API De Xuat
@@ -439,7 +440,7 @@ Neu bat dau tu repo hien tai, co the to chuc nhu sau:
 │   └── package.json
 ├── infra/
 │   ├── docker-compose.yml
-│   └── aws/
+│   └── k8s/
 ├── samples/
 └── OBJECT_REMOVAL_EXECUTION_PLAN.md
 ```
@@ -549,67 +550,58 @@ Tieu chi hoan thanh:
 docker compose up co the chay duoc demo local.
 ```
 
-### Phase 5: AWS Demo Deploy
+### Phase 5: Kubernetes (Minikube) Deploy
 
 Muc tieu:
 
-- Co URL public de demo.
-- Kien truc don gian, de van hanh, khong qua dat.
+- Chay full stack tren minikube local de co moi truong production-like.
+- Kien truc K8s co the chuyen sang AWS/EKS sau nay.
 
 Lua chon de xuat:
 
 ```text
-EC2 GPU g5.xlarge
-Docker Compose
-S3 Bucket
-CloudFront hoac Vercel cho frontend
-Nginx/Caddy reverse proxy
+Minikube (Docker driver)
+Kubernetes manifests (Deployment, Service, StatefulSet, Ingress)
+MinIO (S3-compatible storage trong cluster)
+NVIDIA GPU plugin (neu co GPU local)
+Ingress-Nginx (minikube tunnel)
 ```
 
 Cong viec:
 
 ```text
-1. Tao S3 bucket private de luu original/mask/result.
-2. Tao IAM role cho EC2 truy cap S3.
-3. Tao EC2 g5.xlarge voi NVIDIA driver/CUDA hoac Deep Learning AMI.
-4. Cai Docker va NVIDIA Container Toolkit.
-5. Pull source code.
-6. Build Docker images.
-7. Download model weights vao persistent volume.
-8. Chay backend/worker.
-9. Deploy frontend len Vercel hoac S3 + CloudFront.
-10. Cau hinh domain va HTTPS.
-11. Test full flow voi anh mau.
+1. Tao K8s manifest cho backend (Deployment + Service).
+2. Tao K8s manifest cho frontend (Deployment + Service).
+3. Tao K8s manifest cho MinIO (StatefulSet + PVC).
+4. Tao PersistentVolume cho model cache.
+5. Tao ConfigMap cho env vars.
+6. Tao Secret cho sensitive config.
+7. Tao Ingress de expose API va frontend.
+8. Apply va test tren minikube.
+9. Tao script deploy bang kubectl apply -f k8s/.
+10. Test full flow trong cluster.
 ```
 
 Tieu chi hoan thanh:
 
 ```text
-Upload anh that -> chon object -> remove -> download result tren URL public.
+minikube start && kubectl apply -f k8s/ -> co the upload/segment/remove qua ingress URL.
 ```
 
-### Phase 6: Kubernetes/EKS De Sau
+### Phase 6: AWS/EKS Mo Rong (Future)
 
 Muc tieu:
 
-- Chua dung EKS trong ban demo dau tien.
-- Chi them Kubernetes/EKS sau khi pipeline AI, frontend, backend va Docker Compose da on dinh.
-- Dung EKS nhu phase mo rong de the hien ky nang Kubernetes, khong dua vao critical path cua demo.
+- Chuyen tu minikube local len AWS/EKS khi can public demo.
+- Day la phase mo rong, khong phai critical path cua demo.
 
-Ly do de EKS sau:
-
-- EKS tang do phuc tap ve networking, IAM, GPU node group, ingress, autoscaling va observability.
-- Chi phi cao hon single EC2 vi co control plane, Load Balancer, node group va co the phat sinh NAT Gateway.
-- Demo nho can uu tien ket qua inpainting dep va flow san pham hoan chinh truoc.
-
-Khi nao moi them EKS:
+Khi nao can AWS/EKS:
 
 ```text
-1. Docker Compose da chay on dinh.
-2. Model da duoc cache va warm up tot.
-3. API job flow da on dinh.
-4. S3 storage da tach khoi local filesystem.
-5. Can showcase Kubernetes trong portfolio.
+1. Can public URL cho nguoi khac dung.
+2. Can GPU manh hon GPU local (VD: A10G, A100).
+3. Can scale cho nhieu nguoi dung cung luc.
+4. Can S3 durable storage thay vi MinIO.
 ```
 
 Scope EKS sau nay:
@@ -623,87 +615,93 @@ Queue: SQS ben ngoai cluster
 Registry: ECR
 Auth to AWS: IRSA
 Autoscaling: Karpenter hoac Cluster Autoscaler
-Observability: CloudWatch + Prometheus/Grafana optional
 ```
 
-## 9. AWS Architecture Cho Demo Nho
+## 9. K8s Architecture Cho Demo Local
 
 Kien truc practical:
 
 ```text
-User
--> Frontend: Vercel hoac S3 + CloudFront
--> Backend API: EC2 GPU instance
--> Model inference: cung EC2 GPU instance
--> Storage: S3 private bucket
--> Metadata: SQLite tren EC2 hoac PostgreSQL nho
+User (localhost)
+-> Ingress (minikube tunnel)
+-> Frontend Service -> Frontend Pod (Vite + React)
+-> Backend Service -> Backend Pod (FastAPI)
+-> GPU Worker (cung Backend Pod hoac rieng)
+-> MinIO Service -> MinIO Pod (S3-compatible storage)
+-> SQLite PVC hoac PostgreSQL Pod
 ```
 
-Neu muon gan production hon:
+Cac thanh phan K8s:
 
 ```text
-User
--> CloudFront
--> Frontend S3
--> ALB
--> ECS/Fargate API
--> SQS
--> ECS EC2 GPU Worker
--> S3
--> RDS PostgreSQL
+k8s/
+  frontend-deployment.yaml
+  frontend-service.yaml
+  backend-deployment.yaml
+  backend-service.yaml
+  minio-statefulset.yaml
+  minio-service.yaml
+  model-cache-pvc.yaml
+  data-pvc.yaml
+  configmap.yaml
+  secret.yaml (mau)
+  ingress.yaml
 ```
 
-Khuyen nghi cho demo ca nhan:
+## 10. Cau Hinh Minikube De Xuat
+
+### 10.1. Cau Hinh Co Ban
 
 ```text
-Dung EC2 GPU single-node truoc.
-Chi chuyen sang ECS/EKS + SQS khi co nhieu nguoi dung, can scale, hoac muon showcase infrastructure.
-Khong dua EKS vao ban demo dau tien.
+Driver: docker (macOS/Linux)
+CPU: 4-8 cores
+RAM: 8-16 GB
+Disk: 50-100 GB
+Container runtime: containerd
+Addons: ingress, metrics-server, storage-provisioner
 ```
 
-## 10. Cau Hinh AWS De Xuat
+Khoi dong:
 
-### 10.1. Ban Demo Tiet Kiem Nhung Chat Luong
-
-```text
-EC2: g5.xlarge
-GPU: NVIDIA A10G 24GB
-Storage: 100-200GB gp3
-AMI: AWS Deep Learning AMI Ubuntu
-S3: 1 private bucket
-Frontend: Vercel hoac S3 + CloudFront
-Domain: Route 53 neu co domain rieng
+```bash
+minikube start --cpus=6 --memory=12288 --disk-size=50g
+minikube addons enable ingress
+minikube addons enable metrics-server
 ```
 
-Ly do chon g5.xlarge:
+### 10.2. GPU Support (Neu Co GPU Local)
 
-- 24GB VRAM phu hop SDXL inpainting.
-- Du de chay SAM + SDXL-based inpainting cho demo.
-- Don gian hon so voi multi-instance.
+Neu may co GPU NVIDIA:
 
-### 10.2. Neu Chi Phi Qua Cao
-
-Phuong an giam chi phi:
-
-```text
-Chay GPU EC2 chi khi demo.
-Dung stop/start instance.
-Dung Spot Instance neu chap nhan bi interrupt.
-Dung LaMa-only khi khong can ket qua diffusion.
+```bash
+minikube start --cpus=6 --memory=12288 --disk-size=50g --gpus=all
+kubectl apply -f https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/v0.17.0/deployments/static/nvidia-device-plugin.yml
 ```
 
-Khong khuyen nghi dung CPU cho SDXL vi qua cham cho demo live.
+Neu khong co GPU, chay CPU mode de test pipeline truoc.
+
+### 10.3. Truy Cap App
+
+```bash
+minikube tunnel  # mo terminal rieng
+# Frontend: http://localhost
+# Backend API: http://localhost/api
+# MinIO Console: http://localhost:9001
+```
 
 ## 11. Bien Moi Truong
 
 Can chuan bi:
 
 ```env
-APP_ENV=production
-AWS_REGION=ap-southeast-1
+APP_ENV=development
+STORAGE_BACKEND=local  # local | minio | s3
+S3_ENDPOINT=http://minio:9000
 S3_BUCKET=object-removal-demo
+S3_ACCESS_KEY=minioadmin
+S3_SECRET_KEY=minioadmin
 DATABASE_URL=sqlite:///data/app.db
-MODEL_DEVICE=cuda
+MODEL_DEVICE=cuda  # hoac cpu
 SEGMENTATION_MODEL=sam3_or_sam2_large
 INPAINTING_MODEL=brushnet_sdxl
 MODEL_CACHE_DIR=/models
@@ -830,11 +828,11 @@ Lam theo thu tu sau:
 6. Frontend upload + canvas + mask preview.
 7. Before/after result UI.
 8. Docker Compose.
-9. S3 storage.
-10. AWS EC2 GPU deploy.
+9. MinIO storage + backend abstract storage layer.
+10. Kubernetes manifest + minikube deploy.
 ```
 
-Khong nen bat dau bang AWS truoc. Can co pipeline local on dinh roi moi deploy.
+Khong nen bat dau bang Kubernetes truoc. Can co pipeline local on dinh roi moi deploy.
 
 ## 16. Ket Luan Model Stack Cuoi Cung
 
@@ -855,7 +853,7 @@ BrushNet-SDXL hoac PowerPaint-SDXL la primary
 Big-LaMa la prefill/fallback
 
 Deployment:
-Single EC2 g5.xlarge + Docker Compose + S3 + Vercel/CloudFront
+Docker Compose (local dev) -> Kubernetes/minikube (production-like testing) -> AWS/EKS (future)
 ```
 
 Day la lua chon phu hop nhat neu muc tieu la demo nho nhung ket qua phai dep va thuyet phuc.
