@@ -1,6 +1,6 @@
-# Object Removal Demo
+# Object Removal
 
-Quality-first image object removal demo based on `fastapi/full-stack-fastapi-template`, cleaned down to the pieces needed for this project.
+Quality-first image object removal based on `fastapi/full-stack-fastapi-template`, cleaned down to the pieces needed for this project.
 
 ## Current Stack
 

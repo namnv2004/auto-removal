@@ -1,5 +1,5 @@
 {
-  "name": "object-removal-demo",
+  "name": "object-removal",
   "private": true,
   "workspaces": [
     "frontend"

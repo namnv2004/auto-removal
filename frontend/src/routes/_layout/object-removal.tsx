@@ -5,7 +5,7 @@ export const Route = createFileRoute("/_layout/object-removal")({
   head: () => ({
     meta: [
       {
-        title: "Object Removal - Demo",
+        title: "Object Removal",
       },
     ],
   }),

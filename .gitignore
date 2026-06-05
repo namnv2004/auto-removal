@@ -45,3 +45,6 @@ external/
 .idea/
 .opencode/
 .vscode/
+
+# Codegraph index
+.codegraph/
