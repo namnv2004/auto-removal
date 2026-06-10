@@ -1,0 +1,62 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudflared-config
+  namespace: object-removal-demo
+  labels:
+    app.kubernetes.io/name: object-removal-demo
+    app.kubernetes.io/component: cloudflared
+data:
+  config.yaml: |
+    tunnel: 7ede48bb-24fe-49c8-9d57-cf496b70cbe3
+    credentials-file: /etc/cloudflared/credentials.json
+    ingress:
+      - hostname: namgaussian-face.site
+        service: http://frontend:5173
+      - hostname: face.namgaussian-face.site
+        service: http://frontend:5173
+      - service: http_status:404
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared
+  namespace: object-removal-demo
+  labels:
+    app.kubernetes.io/name: object-removal-demo
+    app.kubernetes.io/component: cloudflared
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cloudflared
+  template:
+    metadata:
+      labels:
+        app: cloudflared
+    spec:
+      containers:
+      - name: cloudflared
+        image: cloudflare/cloudflared:latest
+        args:
+        - tunnel
+        - --config
+        - /etc/cloudflared/config.yaml
+        - run
+        volumeMounts:
+        - name: config
+          mountPath: /etc/cloudflared/config.yaml
+          subPath: config.yaml
+          readOnly: true
+        - name: creds
+          mountPath: /etc/cloudflared/credentials.json
+          subPath: credentials.json
+          readOnly: true
+      volumes:
+      - name: config
+        configMap:
+          name: cloudflared-config
+      - name: creds
+        secret:
+          secretName: cloudflared-credentials

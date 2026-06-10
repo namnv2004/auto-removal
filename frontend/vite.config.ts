@@ -15,6 +15,7 @@ export default defineConfig({
   },
   server: backendProxyTarget
     ? {
+        allowedHosts: true,
         proxy: {
           "/api": {
             target: backendProxyTarget,
