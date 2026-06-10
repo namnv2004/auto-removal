@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 class InpaintingService:
-    """SD 3.5 Medium inpainting service.
+    """ObjectClear inpainting service.
 
     Orchestrates the full object-removal pipeline:
     mask refinement -> crop -> inpaint -> blend.
@@ -71,7 +71,7 @@ class InpaintingService:
 
         try:
             if self._is_objectclear:
-                from app.services.object_clear import ObjectClearPipeline
+                from .object_clear import ObjectClearPipeline
                 variant = "fp16" if self._model_device == "cuda" else None
                 self._pipe = ObjectClearPipeline.from_pretrained_with_custom_modules(
                     model_id,

@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Test SAM 3.1 + SD3.5 Medium inpainting pipeline")
+    parser = argparse.ArgumentParser(description="Test SAM 3.1 + ObjectClear inpainting pipeline")
     parser.add_argument("--image", required=True, help="Path to input image")
     parser.add_argument("--point", help="Point prompt as x,y (e.g. 400,300)")
     parser.add_argument("--box", help="Box prompt as x1,y1,x2,y2")
@@ -57,8 +57,13 @@ def main() -> None:
     t0 = time.monotonic()
 
     from app.services.segmentation import SegmentationService
+    from app.core.config import settings
 
-    seg_service = SegmentationService(model_device=args.device)
+    seg_service = SegmentationService(
+        model_device=args.device,
+        model_cache_dir=settings.MODEL_CACHE_DIR,
+        checkpoint_path=settings.SAM31_CHECKPOINT_PATH,
+    )
     seg_service.set_image(original)
 
     point_coords = None
@@ -113,7 +118,7 @@ def main() -> None:
         torch.cuda.empty_cache()
 
     # ── Step 3: Inpainting ──────────────────────────────────────
-    print("\n[2/3] Running SD 3.5 Medium inpainting...")
+    print("\n[2/3] Running ObjectClear inpainting...")
     t0 = time.monotonic()
 
     from app.services.inpainting import InpaintingService
@@ -121,7 +126,9 @@ def main() -> None:
     from app.core.config import settings
 
     inpaint_service = InpaintingService(
+        model_id=settings.INPAINTING_MODEL,
         model_device=args.device,
+        model_cache_dir=settings.MODEL_CACHE_DIR,
         default_steps=args.steps,
         default_dilation_px=args.dilation,
         hf_token=settings.HF_TOKEN,
@@ -154,7 +161,7 @@ def main() -> None:
     crop_mask = binary_mask.crop(crop_box).resize((1024, 1024), Image.Resampling.LANCZOS)
     crop_mask.save(output_dir / "05_crop_mask.png")
 
-    # SD3.5 output (debug crop at 1024x1024)
+    # ObjectClear output (debug crop at 1024x1024)
     result["debug_crop"].save(output_dir / "06_crop_output.png")
 
     # Final result

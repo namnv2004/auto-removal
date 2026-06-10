@@ -29,7 +29,7 @@ router = APIRouter(
 
 
 def _maybe_unload_sam() -> None:
-    """Unload SAM 3.1 from GPU to CPU to free up VRAM for Stable Diffusion 3.5."""
+    """Unload SAM 3.1 from GPU to CPU to free up VRAM for ObjectClear."""
     try:
         from app.api.deps import _segmentation_service as sam_service
 
@@ -70,7 +70,7 @@ async def remove_object(
     prefill: Annotated[bool | None, Form()] = None,
     strength_prefill: Annotated[float | None, Form()] = None,
 ) -> InpaintingResponse:
-    """Remove the masked object using SD 3.5 Medium inpainting."""
+    """Remove the masked object using ObjectClear inpainting."""
     original = await read_image(image)
     mask_img = await read_mask(mask, (original.width, original.height))
 
@@ -137,7 +137,7 @@ async def remove_object_unified(
     prefill: Annotated[bool | None, Form()] = None,
     strength_prefill: Annotated[float | None, Form()] = None,
 ) -> UnifiedInpaintingResponse:
-    """Run the entire pipeline: Segmentation (SAM 3.1) -> Inpainting (SD 3.5) in one request."""
+    """Run the entire pipeline: Segmentation (SAM 3.1) -> Inpainting (ObjectClear) in one request."""
     # 1. Read input image
     original = await read_image(image)
 
@@ -168,11 +168,11 @@ async def remove_object_unified(
                 detail=f"Segmentation failed: {exc}",
             )
 
-        # 3. Unload SAM from GPU to CPU to free VRAM for SD 3.5
+        # 3. Unload SAM from GPU to CPU to free VRAM for ObjectClear
         if settings.MODEL_DEVICE == "cuda":
             _maybe_unload_sam()
 
-        # 4. Run Inpainting (SD 3.5)
+        # 4. Run Inpainting (ObjectClear)
         inpaint_neg_prompt = negative_prompt
         if text_prompt:
             if inpaint_neg_prompt:
