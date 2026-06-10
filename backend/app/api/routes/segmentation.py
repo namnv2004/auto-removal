@@ -1,20 +1,18 @@
-import base64
 import json
 import logging
-import threading
-from io import BytesIO
 from typing import Annotated, Any
 
 import numpy as np
 import scipy.ndimage as ndimage
 import torch
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
-from PIL import Image, ImageFilter, ImageOps
-from pydantic import BaseModel
+from PIL import Image, ImageFilter
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, SegmentationServiceDep
+from app.api.image_utils import read_image, image_to_base64_png
 from app.core.config import settings
-from app.services.segmentation import SegmentationService
+from app.schemas.segmentation import SegmentationPredictResponse, SegmentationStatus
+from app.services import SegmentationService
 
 logger = logging.getLogger(__name__)
 
@@ -24,47 +22,7 @@ router = APIRouter(
     dependencies=[Depends(get_current_user)],
 )
 
-_service: SegmentationService | None = None
-_service_lock = threading.Lock()
-_predict_lock = threading.Lock()
-
-
-class SegmentationStatus(BaseModel):
-    model: str
-    device: str
-    cuda_available: bool
-    cuda_device_count: int
-    checkpoint_path: str
-    checkpoint_exists: bool
-    loaded: bool
-
-
-class SegmentationPredictResponse(BaseModel):
-    width: int
-    height: int
-    processed_width: int
-    processed_height: int
-    best_score: float
-    mask_png_base64: str
-    overlay_png_base64: str
-
-
-def _get_service() -> SegmentationService:
-    if settings.SEGMENTATION_MODEL != "sam3.1":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only SEGMENTATION_MODEL=sam3.1 is supported in this demo",
-        )
-
-    global _service
-    with _service_lock:
-        if _service is None:
-            _service = SegmentationService(
-                model_device=settings.MODEL_DEVICE,
-                model_cache_dir=settings.MODEL_CACHE_DIR,
-                checkpoint_path=settings.SAM31_CHECKPOINT_PATH,
-            )
-        return _service
+_predict_lock = torch.multiprocessing.Lock() if torch.cuda.is_available() else Any
 
 
 def _parse_json_field(raw_value: str | None, field_name: str, default: Any) -> Any:
@@ -129,27 +87,6 @@ def _parse_box(raw_box: str | None) -> list[float] | None:
     return [float(value) for value in box]
 
 
-async def _read_image(upload: UploadFile) -> Image.Image:
-    image_bytes = await upload.read()
-    max_bytes = settings.MAX_IMAGE_MB * 1024 * 1024
-    if len(image_bytes) > max_bytes:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"Image is larger than MAX_IMAGE_MB={settings.MAX_IMAGE_MB}",
-        )
-
-    try:
-        image = Image.open(BytesIO(image_bytes))
-        image = ImageOps.exif_transpose(image)
-        return image.convert("RGB")
-    except Exception:
-        logger.exception("Invalid image upload")
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Upload must be a valid image",
-        )
-
-
 def _resize_for_model(
     image: Image.Image,
     points: list[list[float]],
@@ -168,12 +105,6 @@ def _resize_for_model(
     resized_points = [[x * scale, y * scale] for x, y in points]
     resized_box = [value * scale for value in box] if box else None
     return resized_image, resized_points, resized_box
-
-
-def _image_to_base64_png(image: Image.Image) -> str:
-    buffer = BytesIO()
-    image.save(buffer, format="PNG")
-    return base64.b64encode(buffer.getvalue()).decode("ascii")
 
 
 def _mask_image(
@@ -230,8 +161,7 @@ def _overlay_image(image: Image.Image, mask_image: Image.Image) -> Image.Image:
 
 
 @router.get("/status", response_model=SegmentationStatus)
-def segmentation_status() -> SegmentationStatus:
-    service = _get_service()
+def segmentation_status(service: SegmentationServiceDep) -> SegmentationStatus:
     return SegmentationStatus(
         model=settings.SEGMENTATION_MODEL,
         device=settings.MODEL_DEVICE,
@@ -245,6 +175,7 @@ def segmentation_status() -> SegmentationStatus:
 
 def segment_image_core(
     original_image: Image.Image,
+    service: SegmentationService,
     points: str | None = None,
     point_labels: str | None = None,
     box: str | None = None,
@@ -337,13 +268,14 @@ def segment_image_core(
     effective_text = circle_mode_text or text_prompt
     effective_box = circle_model_box or model_box
 
-    service = _get_service()
     try:
-        with _predict_lock:
+        # Wrap lock acquisition dynamically if defined (avoiding global route locks)
+        from app.core.concurrency import gpu_lock
+        with torch.no_grad():
             # Ensure model is on the correct device if it was previously unloaded
             if service._predictor is not None:
                 service._predictor.model.to(service.model_device)
-            
+
             # Run prediction inside the correct autocast context for the thread
             from contextlib import nullcontext
             autocast_ctx = (
@@ -387,7 +319,7 @@ def segment_image_core(
         from PIL import ImageDraw
         mask_png = Image.new("L", original_image.size, 0)
         draw = ImageDraw.Draw(mask_png)
-        
+
         if parsed_circle_box is not None or parsed_box is not None:
             logger.warning("SAM 3.1 did not return a valid mask. Falling back to user prompt geometry.")
             if parsed_circle_box is not None:
@@ -422,7 +354,7 @@ def segment_image_core(
                     original_image.width,
                     original_image.height,
                 )
-        
+
         # Absolute fallback: return an empty mask rather than raising an HTTP error to keep the workflow smooth
         logger.warning("SAM 3.1 did not return a valid mask for text prompt. Returning empty mask fallback to prevent UI crash.")
         overlay_png = _overlay_image(original_image, mask_png)
@@ -567,6 +499,7 @@ def segment_image_core(
 
 @router.post("/predict", response_model=SegmentationPredictResponse)
 async def predict_segmentation(
+    service: SegmentationServiceDep,
     image: Annotated[UploadFile, File()],
     points: Annotated[str | None, Form()] = None,
     point_labels: Annotated[str | None, Form()] = None,
@@ -579,11 +512,12 @@ async def predict_segmentation(
     import anyio
     from app.core.concurrency import gpu_lock
 
-    original_image = await _read_image(image)
+    original_image = await read_image(image)
     async with gpu_lock:
         mask_png, overlay_png, best_score, pw, ph = await anyio.to_thread.run_sync(
             lambda: segment_image_core(
                 original_image=original_image,
+                service=service,
                 points=points,
                 point_labels=point_labels,
                 box=box,
@@ -599,6 +533,6 @@ async def predict_segmentation(
         processed_width=pw,
         processed_height=ph,
         best_score=best_score,
-        mask_png_base64=_image_to_base64_png(mask_png),
-        overlay_png_base64=_image_to_base64_png(overlay_png),
+        mask_png_base64=image_to_base64_png(mask_png),
+        overlay_png_base64=image_to_base64_png(overlay_png),
     )

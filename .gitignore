@@ -30,7 +30,8 @@ bun.lockb
 # App data and model artifacts
 data/
 backend/data/
-models/
+/models/
+/backend/models/
 external/
 *.ckpt
 *.pt

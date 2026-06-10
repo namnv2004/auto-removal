@@ -5,6 +5,8 @@ import numpy as np
 from fastapi.testclient import TestClient
 from PIL import Image
 
+from app.main import app
+from app.api.deps import get_segmentation_service
 from app.core.config import settings
 
 
@@ -26,38 +28,39 @@ def test_predict_segmentation_with_text_prompt(
         "best_mask_idx": 0,
     }
 
-    with (
-        patch("app.api.routes.segmentation._get_service") as mock_get_service,
-        patch("app.api.routes.segmentation.settings.SEGMENTATION_MODEL", "sam3.1")
-    ):
-        mock_service = MagicMock()
-        mock_service.predict.return_value = mocked_result
-        mock_service.is_loaded = True
-        mock_service.checkpoint_path.exists.return_value = True
-        mock_get_service.return_value = mock_service
+    mock_service = MagicMock()
+    mock_service.predict.return_value = mocked_result
+    mock_service.is_loaded = True
+    mock_service.checkpoint_path.exists.return_value = True
 
-        # Post request to /segmentation/predict
-        files = {"image": ("test.png", img_byte_arr, "image/png")}
-        data = {
-            "text_prompt": "red square",
-            "mask_threshold": 0.35,
-            "feather_radius": 0.0,
-        }
-        response = client.post(
-            f"{settings.API_V1_STR}/segmentation/predict",
-            headers=superuser_token_headers,
-            files=files,
-            data=data,
-        )
+    app.dependency_overrides[get_segmentation_service] = lambda: mock_service
+    try:
+        with patch("app.api.deps.settings.SEGMENTATION_MODEL", "sam3.1"):
+            # Post request to /segmentation/predict
+            files = {"image": ("test.png", img_byte_arr, "image/png")}
+            data = {
+                "text_prompt": "red square",
+                "mask_threshold": 0.35,
+                "feather_radius": 0.0,
+            }
+            response = client.post(
+                f"{settings.API_V1_STR}/segmentation/predict",
+                headers=superuser_token_headers,
+                files=files,
+                data=data,
+            )
 
-        assert response.status_code == 200
-        json_resp = response.json()
-        assert "mask_png_base64" in json_resp
-        assert "overlay_png_base64" in json_resp
-        assert json_resp["best_score"] == 0.99
-        mock_service.predict.assert_called_once()
-        kwargs = mock_service.predict.call_args[1]
-        assert kwargs["text_prompt"] == "red square"
+            assert response.status_code == 200
+            json_resp = response.json()
+            assert "mask_png_base64" in json_resp
+            assert "overlay_png_base64" in json_resp
+            assert json_resp["best_score"] == 0.99
+            mock_service.predict.assert_called_once()
+            kwargs = mock_service.predict.call_args[1]
+            assert kwargs["text_prompt"] == "red square"
+    finally:
+        app.dependency_overrides.clear()
+
 
 def test_predict_segmentation_conflict_error(
     client: TestClient, superuser_token_headers: dict[str, str]
