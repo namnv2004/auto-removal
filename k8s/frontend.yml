@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: object-removal-demo
+  labels:
+    app.kubernetes.io/name: object-removal-demo
+    app.kubernetes.io/component: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: object-removal-demo
+      app.kubernetes.io/component: frontend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: object-removal-demo
+        app.kubernetes.io/component: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: object-removal-demo-frontend:latest
+          imagePullPolicy: Never
+          command:
+            - npm
+            - run
+            - dev
+            - --
+            - --host
+            - 0.0.0.0
+            - --port
+            - "5173"
+          env:
+            - name: VITE_API_URL
+              value: ""
+            - name: VITE_BACKEND_PROXY_TARGET
+              value: http://backend:8000
+            - name: CHOKIDAR_USEPOLLING
+              value: "true"
+          ports:
+            - name: http
+              containerPort: 5173
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: object-removal-demo
+  labels:
+    app.kubernetes.io/name: object-removal-demo
+    app.kubernetes.io/component: frontend
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: object-removal-demo
+    app.kubernetes.io/component: frontend
+  ports:
+    - name: http
+      port: 5173
+      targetPort: http
+      nodePort: 30073

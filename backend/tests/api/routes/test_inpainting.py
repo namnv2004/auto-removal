@@ -1,0 +1,151 @@
+from io import BytesIO
+from unittest.mock import MagicMock, patch
+
+from fastapi.testclient import TestClient
+from PIL import Image
+
+from app.core.config import settings
+
+
+def test_inpainting_status(
+    client: TestClient, superuser_token_headers: dict[str, str]
+) -> None:
+    with patch("app.api.routes.inpainting._get_service") as mock_get_service:
+        mock_service = MagicMock()
+        mock_service.is_loaded = True
+        mock_get_service.return_value = mock_service
+
+        response = client.get(
+            f"{settings.API_V1_STR}/inpainting/status",
+            headers=superuser_token_headers,
+        )
+
+        assert response.status_code == 200
+        json_resp = response.json()
+        assert json_resp["model"] == settings.INPAINTING_MODEL
+        assert json_resp["device"] == settings.MODEL_DEVICE
+        assert json_resp["loaded"] is True
+
+def test_inpainting_remove(
+    client: TestClient, superuser_token_headers: dict[str, str]
+) -> None:
+    # Create small dummy images in memory
+    img = Image.new("RGB", (100, 100), color="red")
+    img_byte_arr = BytesIO()
+    img.save(img_byte_arr, format="PNG")
+    img_byte_arr.seek(0)
+
+    mask = Image.new("L", (100, 100), color=255)
+    mask_byte_arr = BytesIO()
+    mask.save(mask_byte_arr, format="PNG")
+    mask_byte_arr.seek(0)
+
+    mocked_result = {
+        "result_image": Image.new("RGB", (100, 100), color="blue"),
+        "debug_crop": Image.new("RGB", (100, 100), color="green"),
+        "duration_ms": 1234,
+        "seed_used": 42,
+        "crop_box": (10, 10, 90, 90),
+    }
+
+    with patch("app.api.routes.inpainting._get_service") as mock_get_service:
+        mock_service = MagicMock()
+        mock_service.remove_object.return_value = mocked_result
+        mock_get_service.return_value = mock_service
+
+        files = {
+            "image": ("test.png", img_byte_arr, "image/png"),
+            "mask": ("mask.png", mask_byte_arr, "image/png"),
+        }
+        data = {
+            "prompt": "clean background",
+            "steps": 20,
+            "guidance_scale": 4.5,
+            "strength": 0.95,
+            "mask_dilation": 15,
+            "mask_feather": 5.0,
+        }
+
+        response = client.post(
+            f"{settings.API_V1_STR}/inpainting/remove",
+            headers=superuser_token_headers,
+            files=files,
+            data=data,
+        )
+
+        assert response.status_code == 200
+        json_resp = response.json()
+        assert "result_png_base64" in json_resp
+        assert "debug_crop_png_base64" in json_resp
+        assert json_resp["width"] == 100
+        assert json_resp["height"] == 100
+        assert json_resp["duration_ms"] == 1234
+        assert json_resp["seed_used"] == 42
+        mock_service.remove_object.assert_called_once()
+
+
+def test_inpainting_remove_unified(
+    client: TestClient, superuser_token_headers: dict[str, str]
+) -> None:
+    # Create small dummy image in memory
+    img = Image.new("RGB", (100, 100), color="red")
+    img_byte_arr = BytesIO()
+    img.save(img_byte_arr, format="PNG")
+    img_byte_arr.seek(0)
+
+    mocked_segment_result = (
+        Image.new("L", (100, 100), color=255),
+        Image.new("RGB", (100, 100), color="yellow"),
+        1.0,
+        100,
+        100,
+    )
+
+    mocked_inpaint_result = {
+        "result_image": Image.new("RGB", (100, 100), color="blue"),
+        "debug_crop": Image.new("RGB", (100, 100), color="green"),
+        "duration_ms": 1234,
+        "seed_used": 42,
+        "crop_box": (10, 10, 90, 90),
+    }
+
+    with (
+        patch("app.api.routes.segmentation.segment_image_core") as mock_segment,
+        patch("app.api.routes.inpainting._get_service") as mock_get_service,
+    ):
+        mock_segment.return_value = mocked_segment_result
+        mock_service = MagicMock()
+        mock_service.remove_object.return_value = mocked_inpaint_result
+        mock_get_service.return_value = mock_service
+
+        files = {
+            "image": ("test.png", img_byte_arr, "image/png"),
+        }
+        data = {
+            "text_prompt": "remove object",
+            "prompt": "clean background",
+            "steps": 20,
+            "guidance_scale": 4.5,
+            "strength": 0.95,
+            "mask_dilation": 15,
+            "mask_feather": 5.0,
+        }
+
+        response = client.post(
+            f"{settings.API_V1_STR}/inpainting/remove-unified",
+            headers=superuser_token_headers,
+            files=files,
+            data=data,
+        )
+
+        assert response.status_code == 200
+        json_resp = response.json()
+        assert "result_png_base64" in json_resp
+        assert "mask_png_base64" in json_resp
+        assert "overlay_png_base64" in json_resp
+        assert json_resp["width"] == 100
+        assert json_resp["height"] == 100
+        assert json_resp["duration_ms"] == 1234
+        assert json_resp["seed_used"] == 42
+        mock_segment.assert_called_once()
+        mock_service.remove_object.assert_called_once()

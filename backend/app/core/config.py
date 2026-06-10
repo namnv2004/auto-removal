@@ -56,6 +56,26 @@ class Settings(BaseSettings):
     POSTGRES_PASSWORD: str = ""
     POSTGRES_DB: str = ""
 
+    MODEL_DEVICE: str = "cuda"
+    SEGMENTATION_MODEL: str = "sam3.1"
+    MODEL_CACHE_DIR: str = "/models"
+    SAM31_CHECKPOINT_PATH: str | None = "/models/sam3.1_multiplex.pt"
+    MAX_IMAGE_MB: int = 20
+    MAX_LONG_EDGE: int = 4096
+
+    # Inpainting settings
+    INPAINTING_MODEL: str = "jixin0101/ObjectClear"
+    INPAINTING_STEPS: int = 20
+    INPAINTING_GUIDANCE_SCALE: float = 2.5
+    INPAINTING_STRENGTH: float = 1.0
+    INPAINTING_PREFILL: bool = False
+    INPAINTING_STRENGTH_PREFILL: float = 0.95
+    MASK_DILATION_PX: int = 4
+    MASK_FEATHER_RADIUS: float = 2.0
+    INPAINTING_DEFAULT_PROMPT: str = "clean natural background, realistic, seamless, consistent lighting, detailed texture"
+    INPAINTING_DEFAULT_NEGATIVE: str = "object, person, shadow, reflection, artifact, blur, distortion, duplicate, watermark, text, logo"
+    HF_TOKEN: str | None = None
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> PostgresDsn:

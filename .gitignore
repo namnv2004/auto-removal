@@ -46,5 +46,16 @@ external/
 .opencode/
 .vscode/
 
+# Agent/tool configs (local dev tooling)
+.agents/
+.gemini/
+.playwright-mcp/
+
 # Codegraph index
 .codegraph/
+
+# Sample/evaluation images and outputs
+samples/
+backend/scripts/samples/
+backend/scripts/outputs/
+outputs/

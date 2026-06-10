@@ -30,11 +30,64 @@ Start the full stack:
 docker compose up --build
 ```
 
+Start the full stack in Docker watch mode during development:
+
+```bash
+npm run docker:watch
+```
+
+Backend and frontend source directories are bind-mounted into their containers,
+so normal code changes are picked up by FastAPI dev reload and Vite HMR without
+rebuilding. Dockerfiles and dependency files trigger image rebuilds automatically
+when using Docker watch mode.
+
 Useful local URLs:
 
 - Frontend: `http://localhost:5173`
-- Backend API: `http://localhost:8000`
-- OpenAPI: `http://localhost:8000/docs`
+- Backend API: `http://localhost:5000`
+- OpenAPI: `http://localhost:5000/docs`
+- When opening the frontend from another machine, use the frontend host/IP and
+  let the browser call relative `/api/...` URLs through the Vite proxy. Do not
+  set `VITE_API_URL=http://localhost:5000` unless the browser is on the Docker
+  host itself.
+
+## SAM 3.1 Segmentation Demo
+
+Place the downloaded SAM 3.1 checkpoint at:
+
+```text
+models/sam3.1_multiplex.pt
+```
+
+Then run the Docker stack with GPU access:
+
+```bash
+docker compose up --build
+```
+
+The backend mounts `./models` into `/models` and uses
+`/models/sam3.1_multiplex.pt` by default. Override `MODEL_DIR` or
+`SAM31_CHECKPOINT_PATH` in `.env` if the checkpoint is stored elsewhere.
+
+## Minikube + k9s
+
+Deploy the stack into the current minikube cluster:
+
+```bash
+bash scripts/minikube-deploy.sh
+```
+
+Open the project namespace in k9s:
+
+```bash
+k9s --context minikube -n object-removal-demo
+```
+
+Useful minikube URLs:
+
+- Frontend: `http://$(minikube ip):30073`
+- Backend API: `http://$(minikube ip):30080`
+- OpenAPI: `http://$(minikube ip):30080/docs`
 
 Default local superuser from `.env.example`:
 

@@ -31,3 +31,12 @@ def init_db(session: Session) -> None:
             is_superuser=True,
         )
         user = crud.create_user(session=session, user_create=user_in)
+    else:
+        # Sync password if it has changed in the environment variables (e.g. on docker restart/reconfig)
+        from app.core.security import verify_password, get_password_hash
+        verified, _ = verify_password(settings.FIRST_SUPERUSER_PASSWORD, user.hashed_password)
+        if not verified:
+            user.hashed_password = get_password_hash(settings.FIRST_SUPERUSER_PASSWORD)
+            session.add(user)
+            session.commit()
+            session.refresh(user)

@@ -10,6 +10,7 @@
     "frontend:lint": "npm run lint --prefix frontend",
     "backend:dev": "uv run --project backend fastapi dev app/main.py",
     "backend:lint": "uv run --project backend ruff check app tests",
+    "docker:watch": "docker compose up --build --watch",
     "dev": "npm run frontend:dev",
     "lint": "npm run frontend:lint"
   }

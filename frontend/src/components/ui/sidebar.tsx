@@ -520,7 +520,28 @@ function SidebarMenuButton({
   tooltip?: string | React.ComponentProps<typeof TooltipContent>
 } & VariantProps<typeof sidebarMenuButtonVariants>) {
   const Comp = asChild ? Slot : "button"
-  const { isMobile, state } = useSidebar()
+  const { isMobile } = useSidebar()
+  const triggerRef = React.useRef<HTMLElement>(null)
+  const [tooltipOpen, setTooltipOpen] = React.useState(false)
+
+  const hasOverflow = () => {
+    const trigger = triggerRef.current
+
+    if (!trigger || isMobile) {
+      return false
+    }
+
+    const elements = [
+      trigger,
+      ...trigger.querySelectorAll<HTMLElement>("span:not(.sr-only)"),
+    ]
+
+    return elements.some(
+      (element) =>
+        element.scrollWidth > element.clientWidth ||
+        element.scrollHeight > element.clientHeight,
+    )
+  }
 
   const button = (
     <Comp
@@ -528,6 +549,9 @@ function SidebarMenuButton({
       data-sidebar="menu-button"
       data-size={size}
       data-active={isActive}
+      ref={(node) => {
+        triggerRef.current = node
+      }}
       className={cn(sidebarMenuButtonVariants({ variant, size }), className)}
       {...props}
     />
@@ -544,14 +568,12 @@ function SidebarMenuButton({
   }
 
   return (
-    <Tooltip>
+    <Tooltip
+      open={tooltipOpen}
+      onOpenChange={(open) => setTooltipOpen(open && hasOverflow())}
+    >
       <TooltipTrigger asChild>{button}</TooltipTrigger>
-      <TooltipContent
-        side="right"
-        align="center"
-        hidden={state !== "collapsed" || isMobile}
-        {...tooltip}
-      />
+      <TooltipContent side="right" align="center" {...tooltip} />
     </Tooltip>
   )
 }
