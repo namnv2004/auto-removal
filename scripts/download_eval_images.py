@@ -2,7 +2,7 @@ import urllib.request
 from pathlib import Path
 
 def download_image(url: str, filename: str):
-    output_dir = Path(__file__).parent / "samples"
+    output_dir = Path(__file__).parent.parent / "samples"
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / filename
     print(f"Downloading {url} to {output_path}...")

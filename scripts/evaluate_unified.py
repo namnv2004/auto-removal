@@ -10,11 +10,11 @@ import httpx
 from PIL import Image
 
 # Add backend to path to read config if needed
-sys.path.insert(0, str(Path(__file__).parent.parent / "backend"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
 
 def load_env():
     import os
-    env_path = Path(__file__).parent.parent.parent / ".env"
+    env_path = Path(__file__).resolve().parent.parent / ".env"
     env_vars = {}
     if env_path.exists():
         with open(env_path) as f:
@@ -124,8 +124,8 @@ def main():
     api_port = env_vars.get("BACKEND_PORT", "5000")
     api_base = f"http://localhost:{api_port}/api/v1"
     
-    samples_dir = Path(__file__).parent / "samples"
-    output_dir = Path(__file__).parent / "outputs" / "eval_unified"
+    samples_dir = Path(__file__).parent.parent / "samples"
+    output_dir = Path(__file__).parent.parent / "outputs" / "eval_unified"
     output_dir.mkdir(parents=True, exist_ok=True)
     
     with httpx.Client(timeout=300.0) as client:

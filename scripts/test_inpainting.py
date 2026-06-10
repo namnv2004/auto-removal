@@ -1,19 +1,12 @@
 #!/usr/bin/env python3
 """
-End-to-end inpainting test: SAM 3.1 segment → SD3.5 Medium inpaint → save results.
+End-to-end inpainting test: SAM 3.1 segment → ObjectClear inpaint → save results.
 
-Usage:
-    # Point prompt
-    python scripts/test_inpainting.py --image path/to/image.jpg --point 400,300
-
-    # Box prompt (x1,y1,x2,y2)
-    python scripts/test_inpainting.py --image path/to/image.jpg --box 100,100,500,600
-
-    # Text prompt
-    python scripts/test_inpainting.py --image path/to/image.jpg --text "the cup"
-
-    # Custom output dir
-    python scripts/test_inpainting.py --image path/to/image.jpg --point 400,300 --output outputs/test/
+Run from the project root:
+    python scripts/test_inpainting.py --image samples/coffee.jpg --point 400,300
+    python scripts/test_inpainting.py --image samples/dog.jpg --box 100,100,500,600
+    python scripts/test_inpainting.py --image samples/coffee.jpg --text "the cup"
+    python scripts/test_inpainting.py --image samples/dog.jpg --point 400,300 --output outputs/test/
 """
 import argparse
 import sys
@@ -21,7 +14,7 @@ import time
 from pathlib import Path
 
 # Add backend to path so we can import app modules
-sys.path.insert(0, str(Path(__file__).parent.parent / "backend"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
 
 
 def main() -> None:

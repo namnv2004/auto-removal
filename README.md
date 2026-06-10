@@ -110,22 +110,23 @@ npm install --prefix frontend
 npm run dev --prefix frontend
 ```
 
-## Model Source Repos
-
-Clone external model repos into ignored `external/`:
+## Utility Scripts
 
 ```bash
-bash scripts/clone-model-repos.sh
+# Download SAM 3.1 checkpoint from HuggingFace
+python scripts/download_models.py
+
+# Download evaluation sample images into samples/
+python scripts/download_eval_images.py
+
+# Run end-to-end pipeline test (SAM 3.1 + ObjectClear)
+python scripts/test_inpainting.py --image samples/coffee.jpg --point 400,300
+
+# Run evaluation against the running backend API
+python scripts/evaluate_unified.py
 ```
 
-The script prepares:
-
-- `facebookresearch/sam2` on `sam2.1`
-- `advimman/lama`
-- `TencentARC/BrushNet`
-- `open-mmlab/PowerPaint`
-
-Weights are intentionally not downloaded or committed. Put local checkpoints under ignored `models/`.
+Weights are intentionally not committed. Put local checkpoints under ignored `models/`.
 
 ## MCP
 
