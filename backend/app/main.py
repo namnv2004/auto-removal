@@ -21,8 +21,14 @@ async def lifespan(app: FastAPI):
     # Run db initialization/seeding on startup inside the live container
     try:
         import anyio
-        from app.initial_data import main as init_db_main
-        await anyio.to_thread.run_sync(init_db_main)
+        from sqlmodel import Session
+        from app.core.db import engine, init_db
+
+        def run_seeding() -> None:
+            with Session(engine) as session:
+                init_db(session)
+
+        await anyio.to_thread.run_sync(run_seeding)
     except Exception as e:
         import logging
         logging.getLogger(__name__).exception("Failed to initialize/seed database on startup: %s", e)

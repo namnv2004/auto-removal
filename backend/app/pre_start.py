@@ -21,8 +21,8 @@ wait_seconds = 1
 )
 def init(db_engine: Engine) -> None:
     try:
-        # Try to create session to check if DB is awake
         with Session(db_engine) as session:
+            # Try to create session to check if DB is awake
             session.exec(select(1))
     except Exception as e:
         logger.error(e)
@@ -30,9 +30,9 @@ def init(db_engine: Engine) -> None:
 
 
 def main() -> None:
-    logger.info("Initializing service")
+    logger.info("Initializing service DB check...")
     init(engine)
-    logger.info("Service finished initializing")
+    logger.info("Service finished initializing DB check.")
 
 
 if __name__ == "__main__":

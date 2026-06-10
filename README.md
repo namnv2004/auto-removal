@@ -116,9 +116,6 @@ npm run dev --prefix frontend
 # Download SAM 3.1 checkpoint from HuggingFace
 python scripts/download_models.py
 
-# Download evaluation sample images into samples/
-python scripts/download_eval_images.py
-
 # Run end-to-end pipeline test (SAM 3.1 + ObjectClear)
 python scripts/test_inpainting.py --image samples/coffee.jpg --point 400,300
 
