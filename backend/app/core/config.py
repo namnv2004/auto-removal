@@ -57,6 +57,9 @@ class Settings(BaseSettings):
     POSTGRES_DB: str = ""
 
     MODEL_DEVICE: str = "cuda"
+    # Keep SAM + ObjectClear on GPU (no CPU offload / SAM unload). Use when VRAM >= ~14GB.
+    MODEL_GPU_RESIDENT: bool = False
+    MODEL_WARMUP: bool = False
     SEGMENTATION_MODEL: str = "sam3.1"
     MODEL_CACHE_DIR: str = "/models"
     SAM31_CHECKPOINT_PATH: str | None = "/models/sam3.1_multiplex.pt"

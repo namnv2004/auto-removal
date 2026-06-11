@@ -1,11 +1,11 @@
 from io import BytesIO
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
 from PIL import Image
 
 from app.main import app
-from app.api.deps import get_inpainting_service, get_segmentation_service
+from app.api.deps import get_inpainting_service
 from app.core.config import settings
 
 
@@ -90,73 +90,3 @@ def test_inpainting_remove(
     finally:
         app.dependency_overrides.clear()
 
-
-def test_inpainting_remove_unified(
-    client: TestClient, superuser_token_headers: dict[str, str]
-) -> None:
-    # Create small dummy image in memory
-    img = Image.new("RGB", (100, 100), color="red")
-    img_byte_arr = BytesIO()
-    img.save(img_byte_arr, format="PNG")
-    img_byte_arr.seek(0)
-
-    mocked_segment_result = (
-        Image.new("L", (100, 100), color=255),
-        Image.new("RGB", (100, 100), color="yellow"),
-        1.0,
-        100,
-        100,
-    )
-
-    mocked_inpaint_result = {
-        "result_image": Image.new("RGB", (100, 100), color="blue"),
-        "debug_crop": Image.new("RGB", (100, 100), color="green"),
-        "duration_ms": 1234,
-        "seed_used": 42,
-        "crop_box": (10, 10, 90, 90),
-    }
-
-    mock_inpaint_service = MagicMock()
-    mock_inpaint_service.remove_object.return_value = mocked_inpaint_result
-
-    mock_sam_service = MagicMock()
-
-    app.dependency_overrides[get_inpainting_service] = lambda: mock_inpaint_service
-    app.dependency_overrides[get_segmentation_service] = lambda: mock_sam_service
-    try:
-        with patch("app.api.routes.segmentation.segment_image_core") as mock_segment:
-            mock_segment.return_value = mocked_segment_result
-
-            files = {
-                "image": ("test.png", img_byte_arr, "image/png"),
-            }
-            data = {
-                "text_prompt": "remove object",
-                "prompt": "clean background",
-                "steps": 20,
-                "guidance_scale": 4.5,
-                "strength": 0.95,
-                "mask_dilation": 15,
-                "mask_feather": 5.0,
-            }
-
-            response = client.post(
-                f"{settings.API_V1_STR}/inpainting/remove-unified",
-                headers=superuser_token_headers,
-                files=files,
-                data=data,
-            )
-
-            assert response.status_code == 200
-            json_resp = response.json()
-            assert "result_png_base64" in json_resp
-            assert "mask_png_base64" in json_resp
-            assert "overlay_png_base64" in json_resp
-            assert json_resp["width"] == 100
-            assert json_resp["height"] == 100
-            assert json_resp["duration_ms"] == 1234
-            assert json_resp["seed_used"] == 42
-            mock_segment.assert_called_once()
-            mock_inpaint_service.remove_object.assert_called_once()
-    finally:
-        app.dependency_overrides.clear()

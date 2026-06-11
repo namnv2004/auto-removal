@@ -12,9 +12,9 @@ data:
     credentials-file: /etc/cloudflared/credentials.json
     ingress:
       - hostname: namgaussian-face.site
-        service: http://frontend:5173
+        service: http://frontend:80
       - hostname: face.namgaussian-face.site
-        service: http://frontend:5173
+        service: http://frontend:80
       - service: http_status:404
 
 ---

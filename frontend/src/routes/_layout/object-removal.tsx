@@ -7,7 +7,6 @@ import {
   Send,
   Sparkles,
   Upload,
-  Wand2,
   X,
 } from "lucide-react"
 import {
@@ -21,8 +20,11 @@ import {
 
 import { OpenAPI } from "@/client"
 import { BeforeAfterSlider } from "@/components/BeforeAfterSlider"
+import { MaskGlowOverlay } from "@/components/object-removal/MaskGlowOverlay"
+import { StripeScanOverlay } from "@/components/object-removal/StripeScanOverlay"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { normalizeImageFile } from "@/lib/normalizeImage"
 
 export const Route = createFileRoute("/_layout/object-removal")({
   component: ObjectRemoval,
@@ -52,9 +54,12 @@ function ObjectRemoval() {
   const [textPrompt, setTextPrompt] = useState<string>("")
   const [promptInput, setPromptInput] = useState<string>("")
 
-  // Inpainting state
+  // Processing state
+  type ProcessingPhase = "idle" | "segmenting" | "segmented" | "inpainting"
+  const [processingPhase, setProcessingPhase] =
+    useState<ProcessingPhase>("idle")
   const [inpaintResult, setInpaintResult] = useState<string | null>(null)
-  const [isInpainting, setIsInpainting] = useState(false)
+  const isProcessing = processingPhase !== "idle"
   const [inpaintSeed, setInpaintSeed] = useState<number | null>(null)
   const [inpaintDuration, setInpaintDuration] = useState<number | null>(null)
   const [showComparison, setShowComparison] = useState(false)
@@ -67,26 +72,37 @@ function ObjectRemoval() {
     }
   }, [imageUrl])
 
-  const handleImageChange = (event: ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) {
       return
     }
 
-    setImageFile(file)
-    setImageUrl(URL.createObjectURL(file))
-    setNaturalSize(null)
-    setBoxPrompt(null)
-    setDragPath([])
-    setDrawnPath(null)
-    setTextPrompt("")
-    setPromptInput("")
-    setResult(null)
-    setError(null)
-    setInpaintResult(null)
-    setInpaintSeed(null)
-    setInpaintDuration(null)
-    setShowComparison(false)
+    try {
+      const normalized = await normalizeImageFile(file)
+      if (imageUrl) {
+        URL.revokeObjectURL(imageUrl)
+      }
+      setImageFile(normalized.file)
+      setImageUrl(normalized.previewUrl)
+      setNaturalSize({ width: normalized.width, height: normalized.height })
+      setBoxPrompt(null)
+      setDragPath([])
+      setDrawnPath(null)
+      setTextPrompt("")
+      setPromptInput("")
+      setResult(null)
+      setError(null)
+      setInpaintResult(null)
+      setInpaintSeed(null)
+      setInpaintDuration(null)
+      setShowComparison(false)
+      setProcessingPhase("idle")
+    } catch {
+      setError("Failed to load image. Please try another file.")
+    } finally {
+      event.target.value = ""
+    }
   }
 
   const handleImageLoad = () => {
@@ -114,7 +130,7 @@ function ObjectRemoval() {
   }
 
   const handleCanvasMouseDown = (event: MouseEvent<HTMLElement>) => {
-    if (showComparison || inpaintResult) return
+    if (showComparison || inpaintResult || isProcessing) return
     const point = getPercentPoint(event)
     if (!point) {
       return
@@ -191,6 +207,7 @@ function ObjectRemoval() {
     setInpaintSeed(null)
     setInpaintDuration(null)
     setShowComparison(false)
+    setProcessingPhase("idle")
   }
 
   const handleRunSegmentation = async (
@@ -212,77 +229,91 @@ function ObjectRemoval() {
       return
     }
 
-    setIsInpainting(true)
+    setProcessingPhase("segmenting")
     setError(null)
     setResult(null)
     setInpaintResult(null)
     setShowComparison(false)
 
-    const formData = new FormData()
-    formData.append("image", imageFile)
-
-    if (activeQuery) {
-      formData.append("text_prompt", activeQuery)
-    }
-    if (activeBox) {
-      formData.append(
-        "circle_box",
-        JSON.stringify([
-          activeBox.x1,
-          activeBox.y1,
-          activeBox.x2,
-          activeBox.y2,
-        ]),
-      )
-    }
-    formData.append("mask_threshold", "0.35")
-    formData.append("feather_radius", "0.0")
-
-    // Inpainting params
-    formData.append("steps", "20")
-    formData.append("guidance_scale", "2.5")
-    formData.append("strength", "1.0")
-    formData.append("mask_dilation", "16")
-    formData.append("mask_feather", "8.0")
-    if (seedOverride !== undefined) {
-      formData.append("seed", String(seedOverride))
-    }
+    const segForm = buildSegmentationFormData(
+      imageFile,
+      activeQuery,
+      activeBox,
+    )
 
     try {
-      const token = localStorage.getItem("access_token")
-      const response = await fetch(
-        `${OpenAPI.BASE.replace(/\/$/, "")}/api/v1/inpainting/remove-unified`,
+      const token = getAccessToken()
+      const segResponse = await fetch(
+        `${apiBase()}/api/v1/segmentation/predict`,
         {
           method: "POST",
-          body: formData,
+          body: segForm,
           headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         },
       )
 
-      if (!response.ok) {
-        throw new Error(await readApiError(response))
+      if (!segResponse.ok) {
+        await handleAuthOrThrow(segResponse)
       }
 
-      const data = (await response.json()) as UnifiedInpaintingResponse
-      setResult({
-        width: data.width,
-        height: data.height,
-        processed_width: data.width,
-        processed_height: data.height,
-        best_score: 1.0,
-        mask_png_base64: data.mask_png_base64,
-        overlay_png_base64: data.overlay_png_base64,
-      })
-      setInpaintResult(data.result_png_base64)
-      setInpaintSeed(data.seed_used)
-      setInpaintDuration(data.duration_ms)
+      const segData = (await segResponse.json()) as SegmentationResponse
+      if (segData.best_score <= 0.01) {
+        throw new Error(
+          "No object detected. Draw a circle around the target or try a different description.",
+        )
+      }
+
+      const segResult: SegmentationResponse = {
+        width: segData.width,
+        height: segData.height,
+        processed_width: segData.processed_width,
+        processed_height: segData.processed_height,
+        best_score: segData.best_score,
+        mask_png_base64: segData.mask_png_base64,
+        overlay_png_base64: segData.overlay_png_base64,
+      }
+      setResult(segResult)
+      setProcessingPhase("segmented")
+      await new Promise((resolve) => setTimeout(resolve, 700))
+      setProcessingPhase("inpainting")
+
+      const inpaintForm = new FormData()
+      inpaintForm.append("image", imageFile)
+      inpaintForm.append(
+        "mask",
+        base64ToBlob(segData.mask_png_base64, "image/png"),
+        "mask.png",
+      )
+      appendInpaintingParams(inpaintForm)
+      if (seedOverride !== undefined) {
+        inpaintForm.append("seed", String(seedOverride))
+      }
+
+      const inpaintResponse = await fetch(
+        `${apiBase()}/api/v1/inpainting/remove`,
+        {
+          method: "POST",
+          body: inpaintForm,
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        },
+      )
+
+      if (!inpaintResponse.ok) {
+        await handleAuthOrThrow(inpaintResponse)
+      }
+
+      const inpaintData = (await inpaintResponse.json()) as InpaintingResponse
+      setInpaintResult(inpaintData.result_png_base64)
+      setInpaintSeed(inpaintData.seed_used)
+      setInpaintDuration(inpaintData.duration_ms)
       setShowComparison(true)
     } catch (err) {
       const errMsg =
         err instanceof Error ? err.message : "Object removal failed."
       setError(errMsg)
+      setResult(null)
     } finally {
-      setIsInpainting(false)
+      setProcessingPhase("idle")
     }
   }
 
@@ -290,35 +321,28 @@ function ObjectRemoval() {
     async (seedOverride?: number) => {
       if (!imageFile || !result) return
 
-      setIsInpainting(true)
+      setProcessingPhase("inpainting")
       setError(null)
 
       const maskBlob = base64ToBlob(result.mask_png_base64, "image/png")
       const formData = new FormData()
       formData.append("image", imageFile)
       formData.append("mask", maskBlob, "mask.png")
-      formData.append("steps", "20")
-      formData.append("guidance_scale", "2.5")
-      formData.append("strength", "1.0")
-      formData.append("mask_dilation", "16")
-      formData.append("mask_feather", "8.0")
+      appendInpaintingParams(formData)
       if (seedOverride !== undefined) {
         formData.append("seed", String(seedOverride))
       }
 
       try {
-        const token = localStorage.getItem("access_token")
-        const response = await fetch(
-          `${OpenAPI.BASE.replace(/\/$/, "")}/api/v1/inpainting/remove`,
-          {
-            method: "POST",
-            body: formData,
-            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-          },
-        )
+        const token = getAccessToken()
+        const response = await fetch(`${apiBase()}/api/v1/inpainting/remove`, {
+          method: "POST",
+          body: formData,
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        })
 
         if (!response.ok) {
-          throw new Error(await readApiError(response))
+          await handleAuthOrThrow(response)
         }
 
         const data = (await response.json()) as InpaintingResponse
@@ -330,7 +354,7 @@ function ObjectRemoval() {
         const errMsg = err instanceof Error ? err.message : "Inpainting failed."
         setError(errMsg)
       } finally {
-        setIsInpainting(false)
+        setProcessingPhase("idle")
       }
     },
     [imageFile, result],
@@ -406,7 +430,9 @@ function ObjectRemoval() {
             // Interactive editor view (drawing/masking)
             // biome-ignore lint/a11y/noStaticElementInteractions: Canvas wrapper handles dragging events
             <div
-              className="relative w-fit h-fit cursor-crosshair select-none"
+              className={`relative w-fit h-fit select-none rounded-lg overflow-hidden shadow-2xl border border-zinc-800/80 ${
+                isProcessing ? "cursor-wait" : "cursor-crosshair"
+              }`}
               onMouseDown={handleCanvasMouseDown}
               onMouseMove={handleCanvasMouseMove}
               onMouseUp={handleCanvasMouseUp}
@@ -415,11 +441,15 @@ function ObjectRemoval() {
                 ref={imageRef}
                 src={imageUrl}
                 alt="Workspace canvas background"
-                className="block select-none max-h-[calc(100vh-14rem)] w-auto max-w-full rounded-lg"
+                className={`block select-none max-h-[calc(100vh-14rem)] w-auto max-w-full transition-[filter] duration-500 ${
+                  processingPhase === "segmenting"
+                    ? "brightness-[0.94] saturate-[0.92]"
+                    : ""
+                }`}
                 onLoad={handleImageLoad}
                 draggable={false}
               />
-              {result && (
+              {result && !isProcessing && (
                 <img
                   src={`data:image/png;base64,${result.overlay_png_base64}`}
                   alt="Workspace mask overlay"
@@ -427,6 +457,19 @@ function ObjectRemoval() {
                   draggable={false}
                 />
               )}
+              {processingPhase === "segmenting" && <StripeScanOverlay />}
+              {(processingPhase === "segmented" ||
+                processingPhase === "inpainting") &&
+                result && (
+                  <MaskGlowOverlay
+                    overlaySrc={`data:image/png;base64,${result.overlay_png_base64}`}
+                    phase={
+                      processingPhase === "inpainting"
+                        ? "inpainting"
+                        : "segmented"
+                    }
+                  />
+                )}
               <svg
                 className="pointer-events-none absolute inset-0 w-full h-full z-10 overflow-visible"
                 viewBox="0 0 100 100"
@@ -480,25 +523,6 @@ function ObjectRemoval() {
                 )}
               </svg>
 
-              {/* Inpainting loading overlay */}
-              {isInpainting && (
-                <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center z-20 rounded-lg">
-                  <div className="flex flex-col items-center gap-4">
-                    <div className="relative">
-                      <div className="size-16 rounded-full border-4 border-violet-500/30 border-t-violet-500 animate-spin" />
-                      <Wand2 className="absolute inset-0 m-auto size-6 text-violet-400" />
-                    </div>
-                    <div className="text-center px-4">
-                      <p className="text-violet-300 font-semibold text-sm">
-                        Erasing object...
-                      </p>
-                      <p className="text-zinc-500 text-xs mt-1">
-                        Processing image with ObjectClear (~3s)
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           )
         ) : (
@@ -570,7 +594,7 @@ function ObjectRemoval() {
                 size="sm"
                 variant="outline"
                 onClick={() => handleRemoveObject()}
-                disabled={isInpainting}
+                disabled={isProcessing}
                 className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 h-9 font-semibold"
               >
                 <RefreshCw className="size-3.5 mr-1" />
@@ -617,17 +641,17 @@ function ObjectRemoval() {
             }
             value={promptInput}
             onChange={(e) => setPromptInput(e.target.value)}
-            disabled={!imageFile || isInpainting}
+            disabled={!imageFile || isProcessing}
             className="flex-1 text-sm bg-transparent border-none text-zinc-100 placeholder-zinc-500 focus-visible:ring-0 focus-visible:outline-none"
           />
           <Button
             type="submit"
             disabled={
-              !imageFile || isInpainting || (!promptInput.trim() && !boxPrompt)
+              !imageFile || isProcessing || (!promptInput.trim() && !boxPrompt)
             }
             className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 font-semibold rounded-lg shrink-0 shadow-lg shadow-emerald-600/10 h-9"
           >
-            {isInpainting ? (
+            {isProcessing ? (
               <Loader2 className="animate-spin size-4 mr-2" />
             ) : (
               <Send className="size-4 mr-2" />
@@ -678,14 +702,51 @@ type InpaintingResponse = {
   seed_used: number
 }
 
-type UnifiedInpaintingResponse = {
-  result_png_base64: string
-  mask_png_base64: string
-  overlay_png_base64: string
-  width: number
-  height: number
-  duration_ms: number
-  seed_used: number
+function apiBase() {
+  return OpenAPI.BASE.replace(/\/$/, "")
+}
+
+function getAccessToken() {
+  return localStorage.getItem("access_token")
+}
+
+async function handleAuthOrThrow(response: Response) {
+  if ([401, 403].includes(response.status)) {
+    localStorage.removeItem("access_token")
+    window.location.href = "/login"
+    throw new Error("Unauthorized")
+  }
+  throw new Error(await readApiError(response))
+}
+
+function buildSegmentationFormData(
+  imageFile: File,
+  textPrompt: string,
+  box: PromptBox | null,
+) {
+  const formData = new FormData()
+  formData.append("image", imageFile)
+  if (textPrompt) {
+    formData.append("text_prompt", textPrompt)
+  }
+  if (box) {
+    formData.append(
+      "circle_box",
+      JSON.stringify([box.x1, box.y1, box.x2, box.y2]),
+    )
+  }
+  formData.append("mask_threshold", "0.35")
+  formData.append("feather_radius", "0.0")
+  return formData
+}
+
+function appendInpaintingParams(formData: FormData) {
+  formData.append("steps", "20")
+  formData.append("guidance_scale", "2.5")
+  formData.append("strength", "1.0")
+  formData.append("mask_dilation", "10")
+  formData.append("mask_feather", "4.0")
+  formData.append("prefill", "false")
 }
 
 async function readApiError(response: Response): Promise<string> {

@@ -14,7 +14,7 @@ kubectl apply -f k8s/backend.yml
 kubectl apply -f k8s/frontend.yml
 
 kubectl -n "${NAMESPACE}" rollout status deployment/db --timeout=180s
-kubectl -n "${NAMESPACE}" rollout status deployment/backend --timeout=180s
+kubectl -n "${NAMESPACE}" rollout status deployment/backend --timeout=900s
 kubectl -n "${NAMESPACE}" rollout status deployment/frontend --timeout=180s
 
 cat <<MSG

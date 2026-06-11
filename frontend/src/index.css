@@ -122,3 +122,119 @@
     cursor: pointer;
   }
 }
+
+/* Object removal — phase 1: white dot grid, gentle top-to-bottom fade */
+.seg-dot-grid {
+  background-image: radial-gradient(
+    circle at center,
+    rgba(255, 255, 255, 0.38) 0.6px,
+    transparent 0.6px
+  );
+  background-size: 16px 16px;
+  opacity: 0.42;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.9) 0%,
+    rgba(0, 0, 0, 0.45) 42%,
+    rgba(0, 0, 0, 0.12) 72%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.9) 0%,
+    rgba(0, 0, 0, 0.45) 42%,
+    rgba(0, 0, 0, 0.12) 72%,
+    transparent 100%
+  );
+  animation: seg-dot-breathe 4s ease-in-out infinite;
+}
+
+@keyframes seg-dot-breathe {
+  0%,
+  100% {
+    opacity: 0.34;
+  }
+  50% {
+    opacity: 0.48;
+  }
+}
+
+/* Object removal — phase 2: mask region glow */
+@keyframes mask-pulse-emerald {
+  0%,
+  100% {
+    opacity: 0.3;
+    filter: drop-shadow(0 0 8px rgba(52, 211, 153, 0.45));
+  }
+  50% {
+    opacity: 0.9;
+    filter: drop-shadow(0 0 20px rgba(16, 185, 129, 0.95));
+  }
+}
+
+@keyframes mask-pulse-violet {
+  0%,
+  100% {
+    opacity: 0.35;
+    filter: drop-shadow(0 0 10px rgba(167, 139, 250, 0.55));
+  }
+  50% {
+    opacity: 1;
+    filter: drop-shadow(0 0 26px rgba(139, 92, 246, 1));
+  }
+}
+
+.mask-glow-pulse.mask-glow-found {
+  animation: mask-pulse-emerald 2s ease-in-out infinite;
+  mix-blend-mode: screen;
+}
+
+.mask-glow-pulse.mask-glow-erasing {
+  animation: mask-pulse-violet 1.3s ease-in-out infinite;
+  mix-blend-mode: screen;
+}
+
+@keyframes mask-shimmer-slide {
+  0% {
+    background-position: -80% 0;
+  }
+  100% {
+    background-position: 180% 0;
+  }
+}
+
+.mask-shimmer-sweep {
+  background: linear-gradient(
+    105deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.15) 42%,
+    rgba(255, 255, 255, 0.55) 50%,
+    rgba(255, 255, 255, 0.15) 58%,
+    transparent 70%
+  );
+  background-size: 45% 100%;
+  background-repeat: no-repeat;
+  animation: mask-shimmer-slide 2.4s ease-in-out infinite;
+  mix-blend-mode: overlay;
+}
+
+@keyframes mask-sparkle-twinkle {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 0.75;
+  }
+}
+
+.mask-edge-sparkle {
+  background-image: radial-gradient(
+    circle at 20% 30%,
+    rgba(255, 255, 255, 0.7) 0%,
+    transparent 8%
+  );
+  background-size: 100% 100%;
+  animation: mask-sparkle-twinkle 1.8s ease-in-out infinite;
+  mix-blend-mode: soft-light;
+}

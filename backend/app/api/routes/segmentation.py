@@ -87,6 +87,80 @@ def _parse_box(raw_box: str | None) -> list[float] | None:
     return [float(value) for value in box]
 
 
+def _ellipse_fill_ratio(
+    mask: np.ndarray | None,
+    box: list[float],
+    ref_size: tuple[int, int],
+) -> float:
+    """Fraction of the ellipse inscribed in `box` that is covered by `mask`.
+
+    `box` is in `ref_size` (width, height) coordinates; the mask may be at a
+    different resolution.
+    """
+    if mask is None:
+        return 0.0
+    try:
+        arr = np.asarray(mask).squeeze() > 0.5
+        h, w = arr.shape
+        sx = w / ref_size[0]
+        sy = h / ref_size[1]
+        ecx = (box[0] + box[2]) / 2.0 * sx
+        ecy = (box[1] + box[3]) / 2.0 * sy
+        erx = max((box[2] - box[0]) / 2.0 * sx, 1.0)
+        ery = max((box[3] - box[1]) / 2.0 * sy, 1.0)
+        yy, xx = np.ogrid[:h, :w]
+        ellipse = ((xx - ecx) / erx) ** 2 + ((yy - ecy) / ery) ** 2 <= 1.0
+        ellipse_area = float(ellipse.sum())
+        if ellipse_area <= 0:
+            return 0.0
+        return float(np.logical_and(arr, ellipse).sum()) / ellipse_area
+    except Exception as e:
+        logger.exception("Error computing ellipse fill ratio: %s", e)
+        return 0.0
+
+
+def _pick_mask_for_circle(
+    masks: np.ndarray,
+    scores: list[float],
+    circle_box: list[float],
+    original_image: Image.Image,
+) -> np.ndarray | None:
+    """Pick the candidate mask with the highest IoU against the drawn ellipse."""
+    try:
+        first = np.asarray(masks[0]).squeeze()
+        h, w = first.shape
+        sx = w / original_image.width
+        sy = h / original_image.height
+
+        yy, xx = np.mgrid[0:h, 0:w]
+        ecx = (circle_box[0] + circle_box[2]) / 2.0 * sx
+        ecy = (circle_box[1] + circle_box[3]) / 2.0 * sy
+        erx = max((circle_box[2] - circle_box[0]) / 2.0 * sx, 1.0)
+        ery = max((circle_box[3] - circle_box[1]) / 2.0 * sy, 1.0)
+        ellipse = ((xx - ecx) / erx) ** 2 + ((yy - ecy) / ery) ** 2 <= 1.0
+        ellipse_area = float(ellipse.sum())
+        if ellipse_area <= 0:
+            return None
+
+        best_iou = 0.0
+        best: np.ndarray | None = None
+        for i, candidate in enumerate(masks):
+            score = scores[i] if i < len(scores) else 1.0
+            if score < 0.2:
+                continue
+            arr = np.asarray(candidate).squeeze() > 0.5
+            inter = float(np.logical_and(arr, ellipse).sum())
+            union = float(arr.sum()) + ellipse_area - inter
+            iou = inter / union if union > 0 else 0.0
+            if iou > best_iou:
+                best_iou = iou
+                best = candidate
+        return best
+    except Exception as e:
+        logger.exception("Error picking mask for circle prompt: %s", e)
+        return None
+
+
 def _resize_for_model(
     image: Image.Image,
     points: list[list[float]],
@@ -264,6 +338,22 @@ def segment_image_core(
             parsed_circle_box[3] * csy,
         ]
 
+    # Circle-only mode: SAM3 treats box prompts as visual exemplars ("find
+    # similar objects"), which is unreliable for object selection. Use point
+    # prompts at the ellipse center instead (SAM2 interactive path) so the
+    # object under the circle is segmented directly.
+    circle_point_mode = False
+    circle_retry_box: list[float] | None = None
+    if parsed_circle_box is not None and not text_prompt and not model_points:
+        assert circle_model_box is not None
+        circle_point_mode = True
+        circle_retry_box = circle_model_box
+        ccx = (circle_model_box[0] + circle_model_box[2]) / 2.0
+        ccy = (circle_model_box[1] + circle_model_box[3]) / 2.0
+        model_points = [[ccx, ccy]]
+        parsed_labels = [1]
+        circle_model_box = None
+
     # Determine effective prompts for SAM
     effective_text = circle_mode_text or text_prompt
     effective_box = circle_model_box or model_box
@@ -291,6 +381,68 @@ def segment_image_core(
                     box=effective_box,
                     text_prompt=effective_text,
                 )
+
+                # The center-point prompt can latch onto a sub-part of the
+                # object (e.g. just the coffee surface). If the mask fills too
+                # little of the drawn ellipse, retry with a box prompt and pick
+                # the candidate that best matches the ellipse.
+                if circle_point_mode and circle_retry_box is not None:
+                    point_fill = _ellipse_fill_ratio(
+                        result.get("best_mask"), circle_retry_box, model_image.size
+                    )
+                    if point_fill < 0.15:
+                        box_result = service.predict(box=circle_retry_box)
+                        box_masks = box_result.get("masks")
+                        alt_mask = None
+                        if box_masks is not None and len(box_masks) > 0:
+                            alt_mask = _pick_mask_for_circle(
+                                box_masks,
+                                box_result.get("scores", []),
+                                parsed_circle_box,
+                                original_image,
+                            )
+                        if alt_mask is not None:
+                            alt_fill = _ellipse_fill_ratio(
+                                alt_mask, circle_retry_box, model_image.size
+                            )
+                            if alt_fill > point_fill:
+                                logger.info(
+                                    "Circle prompt: box fallback used (point fill %.3f, box fill %.3f)",
+                                    point_fill,
+                                    alt_fill,
+                                )
+                                box_result["best_mask"] = alt_mask
+                                result = box_result
+
+                    final_fill = _ellipse_fill_ratio(
+                        result.get("best_mask"), circle_retry_box, model_image.size
+                    )
+                    if final_fill < 0.25:
+                        # SAM could not isolate a clean object inside the
+                        # circle; erase everything the user circled instead.
+                        logger.info(
+                            "Circle prompt: using ellipse geometry mask (fill %.3f)",
+                            final_fill,
+                        )
+                        ecx = (circle_retry_box[0] + circle_retry_box[2]) / 2.0
+                        ecy = (circle_retry_box[1] + circle_retry_box[3]) / 2.0
+                        erx = max(
+                            (circle_retry_box[2] - circle_retry_box[0]) / 2.0, 1.0
+                        )
+                        ery = max(
+                            (circle_retry_box[3] - circle_retry_box[1]) / 2.0, 1.0
+                        )
+                        yy, xx = np.ogrid[: model_image.height, : model_image.width]
+                        ellipse_arr = (
+                            ((xx - ecx) / erx) ** 2 + ((yy - ecy) / ery) ** 2
+                        ) <= 1.0
+                        result = {
+                            "masks": ellipse_arr[None, ...],
+                            "scores": [0.5],
+                            "best_mask": ellipse_arr,
+                            "best_score": 0.5,
+                            "best_mask_idx": 0,
+                        }
     except (FileNotFoundError, RuntimeError) as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -306,10 +458,23 @@ def segment_image_core(
         and len(masks) > 0
     ):
         scores = result.get("scores", [])
-        valid_masks = [masks[i] for i, score in enumerate(scores) if score >= 0.45]
+        valid_masks = [masks[i] for i, score in enumerate(scores) if score >= 0.35]
         if valid_masks:
             best_mask = np.logical_or.reduce(valid_masks)
         else:
+            best_mask = result.get("best_mask")
+    elif (
+        parsed_circle_box is not None
+        and masks is not None
+        and len(masks) > 1
+    ):
+        # SAM3 box prompts are visual exemplars and can return several
+        # instances; pick the mask that best fills the drawn ellipse instead
+        # of the one with the highest raw score.
+        best_mask = _pick_mask_for_circle(
+            masks, result.get("scores", []), parsed_circle_box, original_image
+        )
+        if best_mask is None:
             best_mask = result.get("best_mask")
     else:
         best_mask = result.get("best_mask")
@@ -355,8 +520,18 @@ def segment_image_core(
                     original_image.height,
                 )
 
-        # Absolute fallback: return an empty mask rather than raising an HTTP error to keep the workflow smooth
-        logger.warning("SAM 3.1 did not return a valid mask for text prompt. Returning empty mask fallback to prevent UI crash.")
+        if text_prompt:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    f"Could not detect '{text_prompt}'. "
+                    "Draw a circle around the object or try a more specific description."
+                ),
+            )
+
+        logger.warning(
+            "SAM 3.1 did not return a valid mask. Returning empty mask fallback."
+        )
         overlay_png = _overlay_image(original_image, mask_png)
         return (
             mask_png,
@@ -437,7 +612,11 @@ def segment_image_core(
                 ((x_indices - ecx) / erx_pad) ** 2 + ((y_indices - ecy) / ery_pad) ** 2
             ) <= 1.0
 
-            labeled_mask, num_features = ndimage.label(mask_arr)
+            # Binarize first: interactive point prompts return soft masks where
+            # near-zero probabilities are still nonzero and would fuse into one
+            # giant connected component.
+            mask_bin = mask_arr > 0.5
+            labeled_mask, num_features = ndimage.label(mask_bin)
             if num_features > 0:
                 ellipse_labels = set(np.unique(labeled_mask[ellipse]))
                 ellipse_labels.discard(0)  # Remove background

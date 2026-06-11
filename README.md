@@ -38,20 +38,18 @@ auto-removal/
 ├── backend/                    # FastAPI Backend
 │   ├── app/
 │   │   ├── main.py             # Khởi chạy ứng dụng FastAPI & lifespan seeding
-│   │   ├── pre_start.py        # Kiểm tra kết nối DB trước khi chạy app/test
+│   │   ├── pre_start.py        # Kiểm tra kết nối DB trước khi chạy app
 │   │   ├── api/                # API Routers, Deps, và Image Utils dùng chung
 │   │   ├── crud/               # Module tương tác DB cho User
 │   │   ├── models/             # Định nghĩa thực thể Database
 │   │   ├── schemas/            # Validate request/response API đầu vào/đầu ra
 │   │   └── services/           # Module lõi AI: segmentation/ và inpainting/ (ObjectClear)
-│   ├── scripts/                # Lệnh tiền khởi động (prestart.sh, test.sh,...)
+│   ├── scripts/                # Lệnh tiền khởi động (prestart.sh)
 │   └── tests/                  # Bộ unit test và integration test
 │
 ├── frontend/                   # Frontend UI (Vite + React 19 + TypeScript)
-├── compose.yml                 # Docker Compose cấu hình GPU phục vụ local dev
 ├── k8s/                        # File cấu hình Minikube Kubernetes (Deployment, Service)
-├── scripts/                    # Các scripts tiện ích chạy ngoài máy host
-└── samples/                    # Ảnh mẫu đầu vào phục vụ kiểm thử
+└── scripts/                    # Build & deploy scripts cho Minikube
 ```
 
 ---
@@ -68,42 +66,15 @@ cp .env.example .env
 ### Bước 2: Tải các Weights mô hình AI về máy host
 Chạy script tự động tải mô hình SAM 3.1 từ HuggingFace:
 ```bash
-.venv/bin/python scripts/download_models.py
+cd backend && uv sync
+uv run python ../scripts/download_models.py
 ```
 *   Tệp checkpoint SAM 3.1 sẽ được tải về thư mục cache của máy host (`~/.cache/huggingface/hub/`).
 *   Mô hình `jixin0101/ObjectClear` sẽ tự động tải khi gọi chạy inpainting lần đầu tiên.
 
 ---
 
-## 🧪 Chạy thử nghiệm Pipeline End-to-End
-
-### Phương án A: Chạy trực tiếp trên máy host (Có hỗ trợ CUDA)
-Bạn có thể chạy thử nghiệm toàn bộ luồng pipeline từ đầu đến cuối mà không cần khởi động toàn bộ Docker Stack. 
-
-Đảm bảo bạn đứng ở thư mục `backend/` khi chạy lệnh để Pydantic Settings đọc đúng tệp cấu hình `.env`:
-```bash
-cd backend
-SAM31_CHECKPOINT_PATH=../models/sam3.1_multiplex.pt MODEL_CACHE_DIR=../models ../.venv/bin/python ../scripts/test_inpainting.py --image ../samples/coffee.jpg --point 400,300 --device cuda
-```
-*   **Kết quả đầu ra**: Tất cả các tệp debug từng bước (ảnh gốc, raw mask, refined mask, crop input, crop output, kết quả so sánh trước/sau) sẽ được lưu tại thư mục `backend/outputs/test_inpaint/`.
-
-### Phương án B: Khởi chạy toàn bộ hệ thống bằng Docker Compose
-Dành cho môi trường phát triển cục bộ đầy đủ cả giao diện người dùng (Frontend) lẫn cơ sở dữ liệu:
-```bash
-# Khởi động dịch vụ trong nền
-docker compose up -d
-
-# Xem log chạy của dịch vụ backend
-docker compose logs -f backend
-```
-*   **Frontend**: `http://localhost:5173`
-*   **Backend API Docs**: `http://localhost:5000/docs`
-
----
-
-## ☸️ Triển khai Production với Kubernetes (Minikube)
-
-Dự án cung cấp sẵn tệp kịch bản triển khai ứng dụng trên cụm Minikube cục bộ:
+## ☸️ Triển khai với Kubernetes (Minikube)
 
 ```bash
 # Khởi động minikube (nếu chưa chạy)
@@ -124,31 +95,9 @@ Các cổng truy cập mặc định trên Minikube IP:
 
 ---
 
-## 🛠️ Phát triển & Chạy Tests
+## 🛠️ Chạy Tests
 
-### Backend Development
-Để đồng bộ hóa môi trường Python cục bộ và chạy máy chủ backend dev:
-```bash
-cd backend
-uv sync
-uv run uvicorn app.main:app --reload --port 8000
-```
-
-Chạy bộ kiểm thử tự động (Unit và Route Mock tests):
 ```bash
 cd backend
 POSTGRES_PORT=5432 uv run pytest
 ```
-
-### Frontend Development
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
----
-
-## 💡 Lưu ý khi vận hành GPU trên Docker
-*   Yêu cầu cài đặt **NVIDIA Container Toolkit** trên máy host để docker container có quyền truy cập GPU.
-*   Cấu hình GPU trong `compose.yml` sử dụng directive `deploy.resources.reservations.devices` với driver `gpus: all`.

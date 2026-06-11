@@ -1,2 +1,2 @@
-from .inpainting import InpaintingResponse, InpaintingStatusResponse, UnifiedInpaintingResponse
+from .inpainting import InpaintingResponse, InpaintingStatusResponse
 from .segmentation import SegmentationPredictResponse, SegmentationStatus

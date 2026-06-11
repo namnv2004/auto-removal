@@ -116,8 +116,14 @@ class InpaintingService:
             logger.info("SD 1.5 Inpainting loaded as fallback")
 
         if self._model_device == "cuda":
-            self._pipe.enable_model_cpu_offload()
-            logger.info("Inpainting pipeline loaded with CPU offload (VRAM efficient)")
+            from app.core.config import settings
+
+            if settings.MODEL_GPU_RESIDENT:
+                self._pipe.to("cuda")
+                logger.info("Inpainting pipeline loaded on GPU (MODEL_GPU_RESIDENT)")
+            else:
+                self._pipe.enable_model_cpu_offload()
+                logger.info("Inpainting pipeline loaded with CPU offload (VRAM efficient)")
         else:
             self._pipe.to("cpu")
             logger.info("Inpainting pipeline loaded on CPU")
@@ -363,13 +369,7 @@ class InpaintingService:
         mask_crop = binary_mask.crop(crop_box)
 
         resized = inpaint_crop.resize((crop_w, crop_h), Image.Resampling.LANCZOS)
-        
-        # If model is ObjectClear, it has already applied its own wavelet color fix and attention fusion
-        if self._is_objectclear:
-            corrected = resized
-        else:
-            # Apply local color correction & texture grain matching at the crop level for standard SD models
-            corrected = self.apply_color_correction(resized, orig_crop, mask_crop)
+        corrected = self.apply_color_correction(resized, orig_crop, mask_crop)
         
         output = original.copy()
         crop_alpha = feathered_mask.convert("L").crop((x1, y1, x2, y2))
@@ -435,8 +435,8 @@ class InpaintingService:
             short_side = min(image.width, image.height)
             scale = short_side / 512.0
             
-            oc_dilation = max(int(8 * scale), _dilation)
-            oc_feather = max(6.0 * scale, _feather)
+            oc_dilation = min(max(int(8 * scale), _dilation), 14)
+            oc_feather = min(max(6.0 * scale, _feather), 6.0)
             
             # Re-refine mask with the scaled parameters for high-quality ObjectClear boundary blending
             binary_mask, feathered_mask = self.refine_mask(mask, oc_dilation, oc_feather)

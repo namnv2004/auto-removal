@@ -16,12 +16,3 @@ class InpaintingResponse(BaseModel):
     duration_ms: int
     seed_used: int
 
-
-class UnifiedInpaintingResponse(BaseModel):
-    result_png_base64: str
-    mask_png_base64: str
-    overlay_png_base64: str
-    width: int
-    height: int
-    duration_ms: int
-    seed_used: int

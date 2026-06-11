@@ -8,6 +8,8 @@ metadata:
     app.kubernetes.io/component: backend
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: object-removal-demo
@@ -34,9 +36,18 @@ spec:
         - name: backend
           image: object-removal-demo-backend:latest
           imagePullPolicy: Never
+          resources:
+            limits:
+              nvidia.com/gpu: "1"
+              memory: "24Gi"
+              cpu: "8"
+            requests:
+              nvidia.com/gpu: "1"
+              memory: "12Gi"
+              cpu: "4"
           command:
             - fastapi
-            - dev
+            - run
             - --host
             - 0.0.0.0
             - --port
@@ -50,18 +61,32 @@ spec:
           ports:
             - name: http
               containerPort: 8000
+          volumeMounts:
+            - name: models-volume
+              mountPath: /models
+          startupProbe:
+            httpGet:
+              path: /api/v1/utils/health-check/
+              port: http
+            periodSeconds: 15
+            failureThreshold: 60
           readinessProbe:
             httpGet:
               path: /api/v1/utils/health-check/
               port: http
-            initialDelaySeconds: 10
-            periodSeconds: 10
+            periodSeconds: 15
+            failureThreshold: 3
           livenessProbe:
             httpGet:
               path: /api/v1/utils/health-check/
               port: http
-            initialDelaySeconds: 30
             periodSeconds: 20
+            failureThreshold: 5
+      volumes:
+        - name: models-volume
+          hostPath:
+            path: /models
+            type: Directory
 
 ---
 apiVersion: v1

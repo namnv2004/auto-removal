@@ -7,7 +7,7 @@ Priorities:
 - Keep the app runnable before integrating heavy AI models.
 - Prefer small, testable changes.
 - Do not commit model weights, generated image data, secrets, or cloned external repos.
-- Keep it simple: Docker Compose for local dev, minikube for K8s deployment. AWS/EKS is a later phase.
+- Keep it simple: minikube for K8s deployment. AWS/EKS is a later phase.
 - Backend APIs should remain compatible with future SAM/BrushNet/PowerPaint integration.
 
 Current model strategy:
@@ -21,28 +21,21 @@ Current model strategy:
 auto-removal/
   backend/         — FastAPI image processing backend
   frontend/        — Frontend UI (Vite + React 19 + TypeScript)
-  compose.yml      — Docker Compose for local dev
-  scripts/         — Utility scripts
+  k8s/             — Kubernetes manifests (minikube)
+  scripts/         — Build & deploy scripts
   docs/            — Documentation
 ```
 
 ## Commands
 
 ```bash
-# Backend
-cd backend && uv sync
-uv run uvicorn main:app --reload
-
-# Frontend
-cd frontend && npm run dev
-
-# Docker
-docker compose up -d
-docker compose logs -f
-
 # Kubernetes (minikube)
 minikube start
-kubectl apply -f k8s/
+bash scripts/minikube-build-images.sh
+bash scripts/minikube-deploy.sh
+
+# Tests
+cd backend && uv sync && uv run pytest
 ```
 
 ## Subagents
@@ -51,7 +44,7 @@ kubectl apply -f k8s/
 - `frontend-engineer` — Vite + React 19 + TypeScript frontend
 - `debugger` — Debug tests, runtime errors
 - `reviewer` — Code review (read-only)
-- `devops-engineer` — Docker Compose, Kubernetes (minikube)
+- `devops-engineer` — Kubernetes (minikube)
 
 ## Behavioral Guidelines
 

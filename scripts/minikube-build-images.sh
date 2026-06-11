@@ -12,7 +12,7 @@ docker build \
   .
 
 docker build \
-  --target build-stage \
+  --build-arg VITE_API_URL="" \
   -t object-removal-demo-frontend:latest \
   -f frontend/Dockerfile \
   .

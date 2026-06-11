@@ -22,25 +22,9 @@ spec:
         - name: frontend
           image: object-removal-demo-frontend:latest
           imagePullPolicy: Never
-          command:
-            - npm
-            - run
-            - dev
-            - --
-            - --host
-            - 0.0.0.0
-            - --port
-            - "5173"
-          env:
-            - name: VITE_API_URL
-              value: ""
-            - name: VITE_BACKEND_PROXY_TARGET
-              value: http://backend:8000
-            - name: CHOKIDAR_USEPOLLING
-              value: "true"
           ports:
             - name: http
-              containerPort: 5173
+              containerPort: 80
           readinessProbe:
             httpGet:
               path: /
@@ -51,7 +35,7 @@ spec:
             httpGet:
               path: /
               port: http
-            initialDelaySeconds: 30
+            initialDelaySeconds: 10
             periodSeconds: 20
 
 ---
@@ -70,6 +54,6 @@ spec:
     app.kubernetes.io/component: frontend
   ports:
     - name: http
-      port: 5173
+      port: 80
       targetPort: http
       nodePort: 30073

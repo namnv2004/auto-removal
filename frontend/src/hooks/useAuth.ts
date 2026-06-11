@@ -8,6 +8,7 @@ import {
   type UserPublic,
   type UserRegister,
   UsersService,
+  ApiError,
 } from "@/client"
 import { handleError } from "@/utils"
 import useCustomToast from "./useCustomToast"
@@ -34,8 +35,10 @@ const useAuth = () => {
 
   useEffect(() => {
     if (isError && error) {
-      localStorage.removeItem("access_token")
-      navigate({ to: "/login" })
+      if (error instanceof ApiError && [401, 403].includes(error.status)) {
+        localStorage.removeItem("access_token")
+        navigate({ to: "/login" })
+      }
     }
   }, [isError, error, navigate])
 
