@@ -12,8 +12,22 @@ data:
     credentials-file: /etc/cloudflared/credentials.json
     ingress:
       - hostname: namgaussian-face.site
+        path: /object-removal/api/*
+        service: http://backend:8000
+      - hostname: namgaussian-face.site
+        path: /object-removal/*
+        service: http://frontend:80
+      - hostname: namgaussian-face.site
+        path: /
         service: http://frontend:80
       - hostname: face.namgaussian-face.site
+        path: /object-removal/api/*
+        service: http://backend:8000
+      - hostname: face.namgaussian-face.site
+        path: /object-removal/*
+        service: http://frontend:80
+      - hostname: face.namgaussian-face.site
+        path: /
         service: http://frontend:80
       - service: http_status:404
 

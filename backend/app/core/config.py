@@ -59,24 +59,28 @@ class Settings(BaseSettings):
     MODEL_DEVICE: str = "cuda"
     # Keep SAM + ObjectClear on GPU (no CPU offload / SAM unload). Use when VRAM >= ~14GB.
     MODEL_GPU_RESIDENT: bool = False
-    MODEL_WARMUP: bool = False
+    MODEL_WARMUP: bool = True
+    # Enable expandable segments to avoid CUDA memory fragmentation
+    PYTORCH_CUDA_ALLOC_CONF: str = "expandable_segments:True,max_split_size_mb:128"
     SEGMENTATION_MODEL: str = "sam3.1"
     MODEL_CACHE_DIR: str = "/models"
     SAM31_CHECKPOINT_PATH: str | None = "/models/sam3.1_multiplex.pt"
-    MAX_IMAGE_MB: int = 20
-    MAX_LONG_EDGE: int = 4096
+    MAX_IMAGE_MB: int = 10
+    MAX_LONG_EDGE: int = 2048
+    # Clear CUDA cache after each request to prevent memory buildup
+    CLEAR_CUDA_CACHE_AFTER_REQUEST: bool = True
 
-    # Inpainting settings
+    # Inpainting settings - optimized for seamless quality
     INPAINTING_MODEL: str = "jixin0101/ObjectClear"
-    INPAINTING_STEPS: int = 20
-    INPAINTING_GUIDANCE_SCALE: float = 2.5
-    INPAINTING_STRENGTH: float = 1.0
-    INPAINTING_PREFILL: bool = False
-    INPAINTING_STRENGTH_PREFILL: float = 0.95
-    MASK_DILATION_PX: int = 4
-    MASK_FEATHER_RADIUS: float = 2.0
-    INPAINTING_DEFAULT_PROMPT: str = "clean natural background, realistic, seamless, consistent lighting, detailed texture"
-    INPAINTING_DEFAULT_NEGATIVE: str = "object, person, shadow, reflection, artifact, blur, distortion, duplicate, watermark, text, logo"
+    INPAINTING_STEPS: int = 25
+    INPAINTING_GUIDANCE_SCALE: float = 7.0
+    INPAINTING_STRENGTH: float = 0.75
+    INPAINTING_PREFILL: bool = True
+    INPAINTING_STRENGTH_PREFILL: float = 0.65
+    MASK_DILATION_PX: int = 6
+    MASK_FEATHER_RADIUS: float = 3.0
+    INPAINTING_DEFAULT_PROMPT: str = "clean natural background, realistic, seamless, consistent lighting, detailed texture, photorealistic, high quality"
+    INPAINTING_DEFAULT_NEGATIVE: str = "object, person, shadow, reflection, artifact, blur, distortion, duplicate, watermark, text, logo, low quality, bad anatomy, deformed, ugly, blurry, grainy, low resolution, oversaturated, undersaturated"
     HF_TOKEN: str | None = None
 
     @computed_field  # type: ignore[prop-decorator]

@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 from typing import Annotated, Any
 
 import numpy as np
@@ -15,6 +16,9 @@ from app.schemas.segmentation import SegmentationPredictResponse, SegmentationSt
 from app.services import SegmentationService
 
 logger = logging.getLogger(__name__)
+
+# Enable expandable segments to avoid CUDA memory fragmentation
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True,max_split_size_mb:128")
 
 router = APIRouter(
     prefix="/segmentation",
@@ -338,20 +342,17 @@ def segment_image_core(
             parsed_circle_box[3] * csy,
         ]
 
-    # Circle-only mode: SAM3 treats box prompts as visual exemplars ("find
-    # similar objects"), which is unreliable for object selection. Use point
-    # prompts at the ellipse center instead (SAM2 interactive path) so the
-    # object under the circle is segmented directly.
+    # Circle-only mode: For circle prompts, use the drawn circle as a box prompt
+    # to find ALL objects within the circle. SAM3 box prompts find objects inside
+    # the box region. We then combine multiple returned masks.
     circle_point_mode = False
     circle_retry_box: list[float] | None = None
     if parsed_circle_box is not None and not text_prompt and not model_points:
         assert circle_model_box is not None
         circle_point_mode = True
         circle_retry_box = circle_model_box
-        ccx = (circle_model_box[0] + circle_model_box[2]) / 2.0
-        ccy = (circle_model_box[1] + circle_model_box[3]) / 2.0
-        model_points = [[ccx, ccy]]
-        parsed_labels = [1]
+        # Use box prompt directly for the drawn circle - finds all objects inside
+        effective_box = circle_model_box
         circle_model_box = None
 
     # Determine effective prompts for SAM
@@ -382,55 +383,62 @@ def segment_image_core(
                     text_prompt=effective_text,
                 )
 
-                # The center-point prompt can latch onto a sub-part of the
-                # object (e.g. just the coffee surface). If the mask fills too
-                # little of the drawn ellipse, retry with a box prompt and pick
-                # the candidate that best matches the ellipse.
+                # For circle mode (box prompt), combine ALL masks that fall within
+                # the drawn circle to capture multiple objects (boat + person, etc.)
                 if circle_point_mode and circle_retry_box is not None:
-                    point_fill = _ellipse_fill_ratio(
-                        result.get("best_mask"), circle_retry_box, model_image.size
-                    )
-                    if point_fill < 0.15:
-                        box_result = service.predict(box=circle_retry_box)
-                        box_masks = box_result.get("masks")
-                        alt_mask = None
-                        if box_masks is not None and len(box_masks) > 0:
-                            alt_mask = _pick_mask_for_circle(
-                                box_masks,
-                                box_result.get("scores", []),
-                                parsed_circle_box,
-                                original_image,
-                            )
-                        if alt_mask is not None:
-                            alt_fill = _ellipse_fill_ratio(
-                                alt_mask, circle_retry_box, model_image.size
-                            )
-                            if alt_fill > point_fill:
+                    masks = result.get("masks")
+                    scores = result.get("scores", [])
+                    if masks is not None and len(masks) > 1:
+                        # Create ellipse mask for the drawn circle (in mask coordinates)
+                        h, w = masks[0].shape
+                        sx = w / original_image.width
+                        sy = h / original_image.height
+                        ecx = (circle_retry_box[0] + circle_retry_box[2]) / 2.0 * sx
+                        ecy = (circle_retry_box[1] + circle_retry_box[3]) / 2.0 * sy
+                        erx = max((circle_retry_box[2] - circle_retry_box[0]) / 2.0 * sx, 1.0)
+                        ery = max((circle_retry_box[3] - circle_retry_box[1]) / 2.0 * sy, 1.0)
+                        yy, xx = np.ogrid[:h, :w]
+                        ellipse = ((xx - ecx) / erx) ** 2 + ((yy - ecy) / ery) ** 2 <= 1.0
+                        ellipse_area = float(ellipse.sum())
+                        
+                        # Combine masks that are significantly inside the drawn ellipse
+                                overlap_ratio = float(np.logical_and(mask_bin, ellipse).sum()) / mask_area
+                                # Include mask if significant portion is inside the drawn circle
+                                if overlap_ratio > 0.2:
+                                    combined_mask = np.logical_or(combined_mask, mask_bin)
+                                    combined_count += 1
+                            
+                            if combined_count > 1:
                                 logger.info(
-                                    "Circle prompt: box fallback used (point fill %.3f, box fill %.3f)",
-                                    point_fill,
-                                    alt_fill,
+                                    "Circle prompt: combined %d masks within circle (overlap > 0.2)",
+                                    combined_count
                                 )
-                                box_result["best_mask"] = alt_mask
-                                result = box_result
-
+                                result = {
+                                    "masks": combined_mask[None, ...],
+                                    "scores": [max(scores) if scores else 0.5],
+                                    "best_mask": combined_mask,
+                                    "best_score": max(scores) if scores else 0.5,
+                                    "best_mask_idx": 0,
+                                }
+                    
                     final_fill = _ellipse_fill_ratio(
                         result.get("best_mask"), circle_retry_box, model_image.size
                     )
-                    if final_fill < 0.25:
+                    
+                    if final_fill < 0.40:
                         # SAM could not isolate a clean object inside the
-                        # circle; erase everything the user circled instead.
+                        # circle; use tighter ellipse (80% of drawn) to avoid over-segmentation.
                         logger.info(
-                            "Circle prompt: using ellipse geometry mask (fill %.3f)",
+                            "Circle prompt: using tight ellipse geometry mask (fill %.3f)",
                             final_fill,
                         )
                         ecx = (circle_retry_box[0] + circle_retry_box[2]) / 2.0
                         ecy = (circle_retry_box[1] + circle_retry_box[3]) / 2.0
                         erx = max(
-                            (circle_retry_box[2] - circle_retry_box[0]) / 2.0, 1.0
+                            (circle_retry_box[2] - circle_retry_box[0]) / 2.0 * 0.8, 1.0
                         )
                         ery = max(
-                            (circle_retry_box[3] - circle_retry_box[1]) / 2.0, 1.0
+                            (circle_retry_box[3] - circle_retry_box[1]) / 2.0 * 0.8, 1.0
                         )
                         yy, xx = np.ogrid[: model_image.height, : model_image.width]
                         ellipse_arr = (
@@ -690,6 +698,7 @@ async def predict_segmentation(
 ) -> SegmentationPredictResponse:
     import anyio
     from app.core.concurrency import gpu_lock
+    from app.core.config import settings
 
     original_image = await read_image(image)
     async with gpu_lock:
@@ -706,6 +715,11 @@ async def predict_segmentation(
                 feather_radius=feather_radius,
             )
         )
+    
+    if settings.CLEAR_CUDA_CACHE_AFTER_REQUEST and torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
+
     return SegmentationPredictResponse(
         width=original_image.width,
         height=original_image.height,

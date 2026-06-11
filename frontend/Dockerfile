@@ -10,6 +10,8 @@ RUN npm ci
 COPY ./frontend /app/frontend
 ARG VITE_API_URL=http://localhost:8000
 ENV VITE_API_URL=$VITE_API_URL
+ARG VITE_BASE_PATH=/
+ENV VITE_BASE_PATH=$VITE_BASE_PATH
 
 RUN npm run build
 

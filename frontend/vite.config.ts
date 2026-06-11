@@ -5,9 +5,11 @@ import react from "@vitejs/plugin-react-swc"
 import { defineConfig } from "vite"
 
 const backendProxyTarget = process.env.VITE_BACKEND_PROXY_TARGET
+const basePath = process.env.VITE_BASE_PATH || "/"
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  base: basePath,
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

@@ -339,3 +339,19 @@ class SegmentationService:
         if isinstance(value, torch.Tensor):
             return value.detach().cpu().numpy()
         return np.asarray(value)
+
+    def unload_model(self):
+        """Unload model from GPU and free CUDA memory."""
+        if self._predictor is not None:
+            if hasattr(self._predictor, 'model'):
+                self._predictor.model.to("cpu")
+            self._predictor = None
+        if self._inference_state is not None:
+            self._inference_state = None
+        if self._autocast is not None:
+            self._autocast.__exit__(None, None, None)
+            self._autocast = None
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
+        logger.info("SAM 3.1 unloaded from GPU")

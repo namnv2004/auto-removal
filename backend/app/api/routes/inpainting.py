@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Annotated
 
 import anyio
@@ -13,29 +14,14 @@ from app.schemas.inpainting import InpaintingResponse, InpaintingStatusResponse
 
 logger = logging.getLogger(__name__)
 
+# Enable expandable segments to avoid CUDA memory fragmentation
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True,max_split_size_mb:128")
+
 router = APIRouter(
     prefix="/inpainting",
     tags=["inpainting"],
     dependencies=[Depends(get_current_user)],
 )
-
-
-def _maybe_unload_sam() -> None:
-    """Unload SAM 3.1 from GPU to CPU to free up VRAM for ObjectClear."""
-    if settings.MODEL_GPU_RESIDENT:
-        return
-    try:
-        from app.api.deps import _segmentation_service as sam_service
-
-        if (
-            sam_service is not None
-            and getattr(sam_service, "_predictor", None) is not None
-        ):
-            logger.info("Unloading SAM 3.1 from GPU to CPU to prevent VRAM OOM...")
-            sam_service._predictor.model.to("cpu")
-            torch.cuda.empty_cache()
-    except Exception as e:
-        logger.warning("Failed to unload SAM 3.1 from GPU: %s", e)
 
 
 @router.get("/status", response_model=InpaintingStatusResponse)
@@ -68,9 +54,6 @@ async def remove_object(
     original = await read_image(image)
     mask_img = await read_mask(mask, (original.width, original.height))
 
-    if settings.MODEL_DEVICE == "cuda":
-        _maybe_unload_sam()
-
     try:
         async with gpu_lock:
             result = await anyio.to_thread.run_sync(
@@ -95,6 +78,10 @@ async def remove_object(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         )
+    finally:
+        if settings.CLEAR_CUDA_CACHE_AFTER_REQUEST and torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
 
     return InpaintingResponse(
         result_png_base64=image_to_base64_png(result["result_image"]),

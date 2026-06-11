@@ -2,6 +2,7 @@ import logging
 import time
 from pathlib import Path
 
+import cv2
 import numpy as np
 import torch
 from PIL import Image, ImageFilter
@@ -122,8 +123,15 @@ class InpaintingService:
                 self._pipe.to("cuda")
                 logger.info("Inpainting pipeline loaded on GPU (MODEL_GPU_RESIDENT)")
             else:
-                self._pipe.enable_model_cpu_offload()
-                logger.info("Inpainting pipeline loaded with CPU offload (VRAM efficient)")
+                # Use sequential CPU offload for maximum VRAM savings
+                self._pipe.enable_sequential_cpu_offload()
+                # Enable attention slicing for lower peak memory
+                self._pipe.enable_attention_slicing(slice_size=1)
+                # Enable VAE slicing for lower memory during decode
+                if hasattr(self._pipe, 'vae'):
+                    self._pipe.vae.enable_slicing()
+                    self._pipe.vae.enable_tiling()
+                logger.info("Inpainting pipeline loaded with sequential CPU offload + attention/VAE slicing (maximum VRAM efficiency)")
         else:
             self._pipe.to("cpu")
             logger.info("Inpainting pipeline loaded on CPU")
@@ -180,6 +188,7 @@ class InpaintingService:
 
         Uses a narrow boundary band immediately outside the mask to compute a constant
         color offset (bias), preserving generated texture contrast perfectly.
+        Includes gradient domain correction for seamless edges.
         """
         import cv2
 
@@ -209,9 +218,30 @@ class InpaintingService:
         corrected_np = gen_np + color_offset
         corrected_np = np.clip(corrected_np, 0.0, 255.0)
 
+        # Gradient domain correction for seamless edges
+        # Compute gradients in the boundary band
+        if np.any(band):
+            # Get gradient of original in band
+            orig_grad_x = cv2.Sobel(orig_np, cv2.CV_32F, 1, 0, ksize=3)
+            orig_grad_y = cv2.Sobel(orig_np, cv2.CV_32F, 0, 1, ksize=3)
+            gen_grad_x = cv2.Sobel(corrected_np, cv2.CV_32F, 1, 0, ksize=3)
+            gen_grad_y = cv2.Sobel(corrected_np, cv2.CV_32F, 0, 1, ksize=3)
+            
+            # Mean gradient difference in band
+            band_mask = band.astype(np.float32)[:, :, np.newaxis]
+            grad_diff_x = np.mean((orig_grad_x - gen_grad_x) * band_mask, axis=(0, 1))
+            grad_diff_y = np.mean((orig_grad_y - gen_grad_y) * band_mask, axis=(0, 1))
+            
+            # Apply gradient correction inside mask
+            mask_weight = (mask_np.astype(np.float32) / 255.0)[:, :, np.newaxis]
+            # Only apply small gradient correction to avoid artifacts
+            corrected_np += (grad_diff_x * 0.1) * mask_weight
+            corrected_np += (grad_diff_y * 0.1) * mask_weight
+            corrected_np = np.clip(corrected_np, 0.0, 255.0)
+
         # Apply subtle texture noise inside the mask to break smoothness
         h, w = mask_np.shape
-        noise_std = 3.0
+        noise_std = 2.0
         noise = np.random.normal(0, noise_std, (h, w, 3)).astype(np.float32)
         
         mask_weight = (mask_np.astype(np.float32) / 255.0)[:, :, np.newaxis]
@@ -373,8 +403,26 @@ class InpaintingService:
         
         output = original.copy()
         crop_alpha = feathered_mask.convert("L").crop((x1, y1, x2, y2))
+        
+        # Apply additional feathering at the blend boundary for extra smoothness
+        crop_alpha_np = np.array(crop_alpha).astype(np.float32) / 255.0
+        # Slight additional gaussian blur on alpha for smoother transition
+        crop_alpha_np = cv2.GaussianBlur(crop_alpha_np, (3, 3), 0.5)
+        crop_alpha = Image.fromarray((crop_alpha_np * 255).astype(np.uint8), mode="L")
+        
         output.paste(corrected, (x1, y1), mask=crop_alpha)
         return output
+
+    def unload_model(self):
+        """Unload inpainting pipeline from GPU and free CUDA memory."""
+        if self._pipe is not None:
+            if hasattr(self._pipe, 'to'):
+                self._pipe.to("cpu")
+            self._pipe = None
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
+        logger.info("Inpainting pipeline unloaded from GPU")
 
     def remove_object(
         self,

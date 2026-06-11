@@ -123,39 +123,51 @@
   }
 }
 
-/* Object removal — phase 1: white dot grid, gentle top-to-bottom fade */
-.seg-dot-grid {
+/* Object removal — phase 1: one white dot grid + soft fade top → bottom */
+.seg-phase1-dots {
   background-image: radial-gradient(
     circle at center,
-    rgba(255, 255, 255, 0.38) 0.6px,
-    transparent 0.6px
+    rgba(255, 255, 255, 0.72) 1px,
+    transparent 1px
   );
-  background-size: 16px 16px;
-  opacity: 0.42;
+  background-size: 12px 12px;
   -webkit-mask-image: linear-gradient(
     to bottom,
-    rgba(0, 0, 0, 0.9) 0%,
-    rgba(0, 0, 0, 0.45) 42%,
-    rgba(0, 0, 0, 0.12) 72%,
+    rgba(0, 0, 0, 1) 0%,
+    rgba(0, 0, 0, 0.55) 50%,
+    rgba(0, 0, 0, 0.08) 82%,
     transparent 100%
   );
   mask-image: linear-gradient(
     to bottom,
-    rgba(0, 0, 0, 0.9) 0%,
-    rgba(0, 0, 0, 0.45) 42%,
-    rgba(0, 0, 0, 0.12) 72%,
+    rgba(0, 0, 0, 1) 0%,
+    rgba(0, 0, 0, 0.55) 50%,
+    rgba(0, 0, 0, 0.08) 82%,
     transparent 100%
   );
-  animation: seg-dot-breathe 4s ease-in-out infinite;
 }
 
-@keyframes seg-dot-breathe {
-  0%,
-  100% {
-    opacity: 0.34;
+.seg-phase1-fade {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.28) 0%,
+    rgba(255, 255, 255, 0.1) 38%,
+    transparent 72%
+  );
+  background-size: 100% 42%;
+  background-repeat: no-repeat;
+  animation: seg-fade-down 3.5s ease-in-out infinite;
+  mix-blend-mode: soft-light;
+}
+
+@keyframes seg-fade-down {
+  0% {
+    background-position: 0 -55%;
+    opacity: 0.55;
   }
-  50% {
-    opacity: 0.48;
+  100% {
+    background-position: 0 155%;
+    opacity: 0.35;
   }
 }
 
