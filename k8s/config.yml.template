@@ -7,9 +7,9 @@ metadata:
     app.kubernetes.io/name: object-removal-demo
 data:
   PROJECT_NAME: Object Removal Demo
-  FRONTEND_HOST: https://namgaussian-face.site
+  FRONTEND_HOST: https://your-domain.com
   ENVIRONMENT: local
-  BACKEND_CORS_ORIGINS: http://localhost,http://localhost:5173,http://localhost:30073,http://127.0.0.1:5173,http://127.0.0.1:30073,https://namgaussian-face.site,https://face.namgaussian-face.site
+  BACKEND_CORS_ORIGINS: http://localhost,http://localhost:5173,http://localhost:30073,http://127.0.0.1:5173,http://127.0.0.1:30073,https://your-domain.com
   MODEL_WARMUP: "1"
   MODEL_GPU_RESIDENT: "1"
   POSTGRES_SERVER: db
@@ -42,8 +42,8 @@ metadata:
     app.kubernetes.io/name: object-removal-demo
 type: Opaque
 stringData:
-  SECRET_KEY: changethis
-  FIRST_SUPERUSER: pivar999@gmail.com
-  FIRST_SUPERUSER_PASSWORD: A@Kai!313l
-  POSTGRES_PASSWORD: micace123
+  SECRET_KEY: your-secret-key-here
+  FIRST_SUPERUSER: admin@example.com
+  FIRST_SUPERUSER_PASSWORD: your-secure-password
+  POSTGRES_PASSWORD: your-db-password
   # HF_TOKEN: set via GitHub Actions secret or external secret operator
