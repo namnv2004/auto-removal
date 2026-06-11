@@ -58,3 +58,4 @@ external/
 # Sample/evaluation images and outputs
 samples/
 outputs/
+k8s/config.yml

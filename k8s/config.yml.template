@@ -1,0 +1,49 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-env
+  namespace: object-removal-demo
+  labels:
+    app.kubernetes.io/name: object-removal-demo
+data:
+  PROJECT_NAME: Object Removal Demo
+  FRONTEND_HOST: https://namgaussian-face.site
+  ENVIRONMENT: local
+  BACKEND_CORS_ORIGINS: http://localhost,http://localhost:5173,http://localhost:30073,http://127.0.0.1:5173,http://127.0.0.1:30073,https://namgaussian-face.site,https://face.namgaussian-face.site
+  MODEL_WARMUP: "1"
+  MODEL_GPU_RESIDENT: "1"
+  POSTGRES_SERVER: db
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: app
+  POSTGRES_USER: postgres
+  HF_HOME: /models
+  HF_HUB_OFFLINE: "1"
+  MODEL_DEVICE: cuda
+  MODEL_CACHE_DIR: /models
+  SEGMENTATION_MODEL: sam3.1
+  SAM31_CHECKPOINT_PATH: /models/sam3.1_multiplex.pt
+  INPAINTING_MODEL: jixin0101/ObjectClear
+  SMTP_HOST: ""
+  SMTP_PORT: "587"
+  SMTP_TLS: "true"
+  SMTP_SSL: "false"
+  SMTP_USER: ""
+  SMTP_PASSWORD: ""
+  EMAILS_FROM_EMAIL: info@example.com
+  SENTRY_DSN: ""
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: backend-secrets
+  namespace: object-removal-demo
+  labels:
+    app.kubernetes.io/name: object-removal-demo
+type: Opaque
+stringData:
+  SECRET_KEY: changethis
+  FIRST_SUPERUSER: pivar999@gmail.com
+  FIRST_SUPERUSER_PASSWORD: A@Kai!313l
+  POSTGRES_PASSWORD: micace123
+  # HF_TOKEN: set via GitHub Actions secret or external secret operator
