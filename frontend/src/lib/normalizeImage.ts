@@ -9,7 +9,9 @@ const MAX_LONG_EDGE = 4096
 
 /** Apply EXIF orientation, cap resolution, and re-encode for upload. */
 export async function normalizeImageFile(file: File): Promise<NormalizedImage> {
-  const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" })
+  const bitmap = await createImageBitmap(file, {
+    imageOrientation: "from-image",
+  })
   let width = bitmap.width
   let height = bitmap.height
   const longEdge = Math.max(width, height)
@@ -30,8 +32,7 @@ export async function normalizeImageFile(file: File): Promise<NormalizedImage> {
   ctx.drawImage(bitmap, 0, 0, width, height)
   bitmap.close()
 
-  const useJpeg =
-    file.type === "image/jpeg" || /\.jpe?g$/i.test(file.name)
+  const useJpeg = file.type === "image/jpeg" || /\.jpe?g$/i.test(file.name)
   const mime = useJpeg ? "image/jpeg" : "image/png"
   const ext = useJpeg ? "jpg" : "png"
 

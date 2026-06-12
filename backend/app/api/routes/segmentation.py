@@ -6,11 +6,11 @@ from typing import Annotated, Any
 import numpy as np
 import scipy.ndimage as ndimage
 import torch
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from PIL import Image, ImageFilter
 
-from app.api.deps import get_current_user, SegmentationServiceDep
-from app.api.image_utils import read_image, image_to_base64_png
+from app.api.deps import SegmentationServiceDep
+from app.api.image_utils import image_to_base64_png, read_image
 from app.core.config import settings
 from app.schemas.segmentation import SegmentationPredictResponse, SegmentationStatus
 from app.services import SegmentationService
@@ -23,7 +23,6 @@ os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True,max_s
 router = APIRouter(
     prefix="/segmentation",
     tags=["segmentation"],
-    dependencies=[Depends(get_current_user)],
 )
 
 _predict_lock = torch.multiprocessing.Lock() if torch.cuda.is_available() else Any
@@ -360,8 +359,6 @@ def segment_image_core(
     effective_box = circle_model_box or model_box
 
     try:
-        # Wrap lock acquisition dynamically if defined (avoiding global route locks)
-        from app.core.concurrency import gpu_lock
         with torch.no_grad():
             # Ensure model is on the correct device if it was previously unloaded
             if service._predictor is not None:
@@ -399,32 +396,39 @@ def segment_image_core(
                         ery = max((circle_retry_box[3] - circle_retry_box[1]) / 2.0 * sy, 1.0)
                         yy, xx = np.ogrid[:h, :w]
                         ellipse = ((xx - ecx) / erx) ** 2 + ((yy - ecy) / ery) ** 2 <= 1.0
-                        ellipse_area = float(ellipse.sum())
-                        
+
                         # Combine masks that are significantly inside the drawn ellipse
-                                overlap_ratio = float(np.logical_and(mask_bin, ellipse).sum()) / mask_area
-                                # Include mask if significant portion is inside the drawn circle
-                                if overlap_ratio > 0.2:
-                                    combined_mask = np.logical_or(combined_mask, mask_bin)
-                                    combined_count += 1
-                            
-                            if combined_count > 1:
-                                logger.info(
-                                    "Circle prompt: combined %d masks within circle (overlap > 0.2)",
-                                    combined_count
-                                )
-                                result = {
-                                    "masks": combined_mask[None, ...],
-                                    "scores": [max(scores) if scores else 0.5],
-                                    "best_mask": combined_mask,
-                                    "best_score": max(scores) if scores else 0.5,
-                                    "best_mask_idx": 0,
-                                }
-                    
+                        combined_mask = np.zeros_like(ellipse, dtype=bool)
+                        combined_count = 0
+                        for mask in masks:
+                            mask_bin = np.asarray(mask).astype(bool)
+                            mask_area = float(mask_bin.sum())
+                            if mask_area <= 0:
+                                continue
+
+                            overlap_ratio = float(np.logical_and(mask_bin, ellipse).sum()) / mask_area
+                            # Include mask if significant portion is inside the drawn circle
+                            if overlap_ratio > 0.2:
+                                combined_mask = np.logical_or(combined_mask, mask_bin)
+                                combined_count += 1
+
+                        if combined_count > 1:
+                            logger.info(
+                                "Circle prompt: combined %d masks within circle (overlap > 0.2)",
+                                combined_count,
+                            )
+                            result = {
+                                "masks": combined_mask[None, ...],
+                                "scores": [max(scores) if scores else 0.5],
+                                "best_mask": combined_mask,
+                                "best_score": max(scores) if scores else 0.5,
+                                "best_mask_idx": 0,
+                            }
+
                     final_fill = _ellipse_fill_ratio(
                         result.get("best_mask"), circle_retry_box, model_image.size
                     )
-                    
+
                     if final_fill < 0.40:
                         # SAM could not isolate a clean object inside the
                         # circle; use tighter ellipse (80% of drawn) to avoid over-segmentation.
@@ -697,6 +701,7 @@ async def predict_segmentation(
     feather_radius: Annotated[float, Form()] = 0.0,
 ) -> SegmentationPredictResponse:
     import anyio
+
     from app.core.concurrency import gpu_lock
     from app.core.config import settings
 
@@ -715,7 +720,7 @@ async def predict_segmentation(
                 feather_radius=feather_radius,
             )
         )
-    
+
     if settings.CLEAR_CUDA_CACHE_AFTER_REQUEST and torch.cuda.is_available():
         torch.cuda.empty_cache()
         torch.cuda.ipc_collect()

@@ -42,15 +42,9 @@ export function MaskGlowOverlay({ overlaySrc, phase }: MaskGlowOverlayProps) {
         draggable={false}
       />
 
-      <div
-        className="mask-shimmer-sweep absolute inset-0"
-        style={clip}
-      />
+      <div className="mask-shimmer-sweep absolute inset-0" style={clip} />
 
-      <div
-        className="mask-edge-sparkle absolute inset-0"
-        style={clip}
-      />
+      <div className="mask-edge-sparkle absolute inset-0" style={clip} />
 
       <div
         className={`absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 rounded-full border bg-zinc-950/80 px-4 py-1.5 backdrop-blur-md transition-colors duration-500 ${

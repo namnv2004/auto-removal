@@ -32,10 +32,7 @@ function measureDisplaySize(
         return
       }
 
-      if (
-        after.naturalWidth !== natW ||
-        after.naturalHeight !== natH
-      ) {
+      if (after.naturalWidth !== natW || after.naturalHeight !== natH) {
         console.warn(
           "Before/after size mismatch:",
           `${natW}x${natH}`,
@@ -44,10 +41,7 @@ function measureDisplaySize(
         )
       }
 
-      const maxHeight = Math.max(
-        200,
-        window.innerHeight - 14 * 16,
-      )
+      const maxHeight = Math.max(200, window.innerHeight - 14 * 16)
       const scale = Math.min(1, maxHeight / natH)
       resolve({
         width: Math.round(natW * scale),

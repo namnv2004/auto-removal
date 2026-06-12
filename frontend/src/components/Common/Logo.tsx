@@ -1,11 +1,6 @@
 import { Link } from "@tanstack/react-router"
 
-import { useTheme } from "@/components/theme-provider"
 import { cn } from "@/lib/utils"
-import icon from "/assets/images/fastapi-icon.svg"
-import iconLight from "/assets/images/fastapi-icon-light.svg"
-import logo from "/assets/images/fastapi-logo.svg"
-import logoLight from "/assets/images/fastapi-logo-light.svg"
 
 interface LogoProps {
   variant?: "full" | "icon" | "responsive"
@@ -18,43 +13,36 @@ export function Logo({
   className,
   asLink = true,
 }: LogoProps) {
-  const { resolvedTheme } = useTheme()
-  const isDark = resolvedTheme === "dark"
-
-  const fullLogo = isDark ? logoLight : logo
-  const iconLogo = isDark ? iconLight : icon
-
-  const content =
-    variant === "responsive" ? (
-      <>
-        <img
-          src={fullLogo}
-          alt="Object Removal"
-          className={cn(
-            "h-6 w-auto group-data-[collapsible=icon]:hidden",
-            className,
-          )}
-        />
-        <img
-          src={iconLogo}
-          alt="Object Removal"
-          className={cn(
-            "size-5 hidden group-data-[collapsible=icon]:block",
-            className,
-          )}
-        />
-      </>
-    ) : (
-      <img
-        src={variant === "full" ? fullLogo : iconLogo}
-        alt="Object Removal"
-        className={cn(variant === "full" ? "h-6 w-auto" : "size-5", className)}
-      />
-    )
+  const content = (
+    <div className={cn("flex items-center gap-3", className)}>
+      <LogoMark variant={variant} />
+      {(variant === "full" || variant === "responsive") && (
+        <span className="text-xl font-semibold tracking-tight group-data-[collapsible=icon]:hidden">
+          LumaErase
+        </span>
+      )}
+    </div>
+  )
 
   if (!asLink) {
     return content
   }
 
   return <Link to="/">{content}</Link>
+}
+
+function LogoMark({ variant }: { variant?: "full" | "icon" | "responsive" }) {
+  const size =
+    variant === "full"
+      ? "size-12"
+      : variant === "responsive"
+        ? "size-9"
+        : "size-8"
+  return (
+    <img
+      src="/assets/images/lumaerase_logo.png?v=3"
+      alt="LumaErase Logo"
+      className={cn("shrink-0 object-contain", size)}
+    />
+  )
 }

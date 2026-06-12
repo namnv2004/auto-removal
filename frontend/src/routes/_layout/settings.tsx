@@ -1,10 +1,10 @@
-import { createFileRoute } from "@tanstack/react-router"
-
+import { createFileRoute, redirect } from "@tanstack/react-router"
+import { UsersService } from "@/client"
 import ChangePassword from "@/components/UserSettings/ChangePassword"
 import DeleteAccount from "@/components/UserSettings/DeleteAccount"
 import UserInformation from "@/components/UserSettings/UserInformation"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import useAuth from "@/hooks/useAuth"
+import useAuth, { isDemoDomain, isLoggedIn } from "@/hooks/useAuth"
 
 const tabsConfig = [
   { value: "my-profile", title: "My profile", component: UserInformation },
@@ -14,6 +14,19 @@ const tabsConfig = [
 
 export const Route = createFileRoute("/_layout/settings")({
   component: UserSettings,
+  beforeLoad: async () => {
+    const isDemo = isDemoDomain()
+    if (!isLoggedIn()) {
+      throw redirect({ to: isDemo ? "/" : "/login" })
+    }
+
+    try {
+      await UsersService.readUserMe()
+    } catch {
+      localStorage.removeItem("access_token")
+      throw redirect({ to: isDemo ? "/" : "/login" })
+    }
+  },
   head: () => ({
     meta: [
       {

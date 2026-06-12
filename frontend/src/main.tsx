@@ -18,10 +18,21 @@ OpenAPI.TOKEN = async () => {
   return localStorage.getItem("access_token") || ""
 }
 
+const isProtectedRoute = () => {
+  const pathname = window.location.pathname
+  return ["/admin", "/settings"].some(
+    (path) => pathname === path || pathname.startsWith(`${path}/`),
+  )
+}
+
 const handleApiError = (error: Error) => {
   if (error instanceof ApiError && [401, 403].includes(error.status)) {
     localStorage.removeItem("access_token")
-    window.location.href = "/login"
+    if (isProtectedRoute()) {
+      window.location.href = window.location.hostname.startsWith("demo.")
+        ? "/"
+        : "/login"
+    }
   }
 }
 const queryClient = new QueryClient({

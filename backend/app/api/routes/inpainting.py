@@ -4,10 +4,10 @@ from typing import Annotated
 
 import anyio
 import torch
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 
-from app.api.deps import get_current_user, InpaintingServiceDep
-from app.api.image_utils import read_image, read_mask, image_to_base64_png
+from app.api.deps import InpaintingServiceDep
+from app.api.image_utils import image_to_base64_png, read_image, read_mask
 from app.core.concurrency import gpu_lock
 from app.core.config import settings
 from app.schemas.inpainting import InpaintingResponse, InpaintingStatusResponse
@@ -20,7 +20,6 @@ os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True,max_s
 router = APIRouter(
     prefix="/inpainting",
     tags=["inpainting"],
-    dependencies=[Depends(get_current_user)],
 )
 
 
@@ -91,4 +90,3 @@ async def remove_object(
         duration_ms=result["duration_ms"],
         seed_used=result["seed_used"],
     )
-

@@ -23,7 +23,6 @@ import {
 import { cn } from "@/lib/utils"
 import { useIsMobile } from "@/hooks/useMobile"
 
-const SIDEBAR_COOKIE_NAME = "sidebar_state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 const SIDEBAR_WIDTH = "16rem"
 const SIDEBAR_WIDTH_MOBILE = "18rem"
@@ -67,12 +66,20 @@ function SidebarProvider({
   const isMobile = useIsMobile()
   const [openMobile, setOpenMobile] = React.useState(false)
 
+  const getSidebarCookieName = () => {
+    if (typeof window !== "undefined" && window.location.hostname.startsWith("demo.")) {
+      return "sidebar_state_demo"
+    }
+    return "sidebar_state"
+  }
+
   const getInitialOpen = () => {
     if (typeof document === "undefined") return defaultOpen
 
+    const cookieName = getSidebarCookieName()
     const cookie = document.cookie
       .split("; ")
-      .find((c) => c.startsWith(`${SIDEBAR_COOKIE_NAME}=`))
+      .find((c) => c.startsWith(`${cookieName}=`))
 
     if (!cookie) return defaultOpen
 
@@ -93,7 +100,8 @@ function SidebarProvider({
       }
 
       // This sets the cookie to keep the sidebar state.
-      document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
+      const cookieName = getSidebarCookieName()
+      document.cookie = `${cookieName}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
     },
     [setOpenProp, open],
   )

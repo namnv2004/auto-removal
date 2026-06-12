@@ -31,7 +31,7 @@ export const Route = createFileRoute("/_layout/object-removal")({
   head: () => ({
     meta: [
       {
-        title: "Object Removal",
+        title: "LumaErase Studio",
       },
     ],
   }),
@@ -235,11 +235,7 @@ function ObjectRemoval() {
     setInpaintResult(null)
     setShowComparison(false)
 
-    const segForm = buildSegmentationFormData(
-      imageFile,
-      activeQuery,
-      activeBox,
-    )
+    const segForm = buildSegmentationFormData(imageFile, activeQuery, activeBox)
 
     try {
       const token = getAccessToken()
@@ -522,7 +518,6 @@ function ObjectRemoval() {
                   />
                 )}
               </svg>
-
             </div>
           )
         ) : (

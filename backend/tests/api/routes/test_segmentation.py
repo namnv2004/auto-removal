@@ -5,14 +5,12 @@ import numpy as np
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from app.main import app
 from app.api.deps import get_segmentation_service
 from app.core.config import settings
+from app.main import app
 
 
-def test_predict_segmentation_with_text_prompt(
-    client: TestClient, superuser_token_headers: dict[str, str]
-) -> None:
+def test_predict_segmentation_with_text_prompt(client: TestClient) -> None:
     # Create a small dummy image in memory
     img = Image.new("RGB", (100, 100), color="red")
     img_byte_arr = BytesIO()
@@ -45,7 +43,6 @@ def test_predict_segmentation_with_text_prompt(
             }
             response = client.post(
                 f"{settings.API_V1_STR}/segmentation/predict",
-                headers=superuser_token_headers,
                 files=files,
                 data=data,
             )
@@ -62,9 +59,7 @@ def test_predict_segmentation_with_text_prompt(
         app.dependency_overrides.clear()
 
 
-def test_predict_segmentation_conflict_error(
-    client: TestClient, superuser_token_headers: dict[str, str]
-) -> None:
+def test_predict_segmentation_conflict_error(client: TestClient) -> None:
     # Create a small dummy image in memory
     img = Image.new("RGB", (100, 100), color="red")
     img_byte_arr = BytesIO()
@@ -80,7 +75,6 @@ def test_predict_segmentation_conflict_error(
     }
     response = client.post(
         f"{settings.API_V1_STR}/segmentation/predict",
-        headers=superuser_token_headers,
         files=files,
         data=data,
     )

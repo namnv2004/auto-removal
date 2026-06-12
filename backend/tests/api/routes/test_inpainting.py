@@ -4,14 +4,12 @@ from unittest.mock import MagicMock
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from app.main import app
 from app.api.deps import get_inpainting_service
 from app.core.config import settings
+from app.main import app
 
 
-def test_inpainting_status(
-    client: TestClient, superuser_token_headers: dict[str, str]
-) -> None:
+def test_inpainting_status(client: TestClient) -> None:
     mock_service = MagicMock()
     mock_service.is_loaded = True
 
@@ -19,7 +17,6 @@ def test_inpainting_status(
     try:
         response = client.get(
             f"{settings.API_V1_STR}/inpainting/status",
-            headers=superuser_token_headers,
         )
 
         assert response.status_code == 200
@@ -31,9 +28,7 @@ def test_inpainting_status(
         app.dependency_overrides.clear()
 
 
-def test_inpainting_remove(
-    client: TestClient, superuser_token_headers: dict[str, str]
-) -> None:
+def test_inpainting_remove(client: TestClient) -> None:
     # Create small dummy images in memory
     img = Image.new("RGB", (100, 100), color="red")
     img_byte_arr = BytesIO()
@@ -73,7 +68,6 @@ def test_inpainting_remove(
 
         response = client.post(
             f"{settings.API_V1_STR}/inpainting/remove",
-            headers=superuser_token_headers,
             files=files,
             data=data,
         )
@@ -89,4 +83,3 @@ def test_inpainting_remove(
         mock_service.remove_object.assert_called_once()
     finally:
         app.dependency_overrides.clear()
-
