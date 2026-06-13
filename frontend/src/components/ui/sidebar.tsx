@@ -67,7 +67,7 @@ function SidebarProvider({
   const [openMobile, setOpenMobile] = React.useState(false)
 
   const getSidebarCookieName = () => {
-    if (typeof window !== "undefined" && window.location.hostname.startsWith("demo.")) {
+    if (typeof window !== "undefined" && window.location.hostname.startsWith("image.")) {
       return "sidebar_state_demo"
     }
     return "sidebar_state"

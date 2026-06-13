@@ -16,7 +16,7 @@ import useCustomToast from "./useCustomToast"
 const isDemoDomain = () => {
   return (
     typeof window !== "undefined" &&
-    window.location.hostname.startsWith("demo.")
+    window.location.hostname.startsWith("image.")
   )
 }
 

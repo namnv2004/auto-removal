@@ -29,7 +29,7 @@ const handleApiError = (error: Error) => {
   if (error instanceof ApiError && [401, 403].includes(error.status)) {
     localStorage.removeItem("access_token")
     if (isProtectedRoute()) {
-      window.location.href = window.location.hostname.startsWith("demo.")
+      window.location.href = window.location.hostname.startsWith("image.")
         ? "/"
         : "/login"
     }

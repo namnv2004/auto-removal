@@ -11,6 +11,11 @@ data:
     tunnel: 7ede48bb-24fe-49c8-9d57-cf496b70cbe3
     credentials-file: /etc/cloudflared/credentials.json
     ingress:
+      - hostname: chat.namgaussian-face.site
+        service: http://openwebui.rag-ops.svc.cluster.local:8080
+      - hostname: namgaussian-face.site
+        path: /api/*
+        service: http://frontend:80
       - hostname: namgaussian-face.site
         path: /object-removal/api/*
         service: http://frontend:80
@@ -20,13 +25,16 @@ data:
       - hostname: namgaussian-face.site
         path: /
         service: http://frontend:80
-      - hostname: demo.namgaussian-face.site
+      - hostname: image.namgaussian-face.site
+        path: /api/*
+        service: http://frontend:80
+      - hostname: image.namgaussian-face.site
         path: /object-removal/api/*
         service: http://frontend:80
-      - hostname: demo.namgaussian-face.site
+      - hostname: image.namgaussian-face.site
         path: /object-removal/*
         service: http://frontend:80
-      - hostname: demo.namgaussian-face.site
+      - hostname: image.namgaussian-face.site
         path: /
         service: http://frontend:80
       - service: http_status:404

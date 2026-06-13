@@ -27,13 +27,13 @@ spec:
               containerPort: 80
           readinessProbe:
             httpGet:
-              path: /object-removal/
+              path: /
               port: http
             initialDelaySeconds: 5
             periodSeconds: 10
           livenessProbe:
             httpGet:
-              path: /object-removal/
+              path: /
               port: http
             initialDelaySeconds: 10
             periodSeconds: 20
