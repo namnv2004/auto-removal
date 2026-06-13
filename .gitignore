@@ -30,7 +30,8 @@ bun.lockb
 # App data and model artifacts
 data/
 backend/data/
-models/
+/models/
+/backend/models/
 external/
 *.ckpt
 *.pt
@@ -45,3 +46,16 @@ external/
 .idea/
 .opencode/
 .vscode/
+
+# Agent/tool configs (local dev tooling)
+.agents/
+.gemini/
+.playwright-mcp/
+
+# Codegraph index
+.codegraph/
+
+# Sample/evaluation images and outputs
+samples/
+outputs/
+k8s/config.yml

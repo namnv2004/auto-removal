@@ -1,8 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useNavigate } from "@tanstack/react-router"
+import { useEffect } from "react"
 
 import {
   type Body_login_login_access_token as AccessToken,
+  ApiError,
   LoginService,
   type UserPublic,
   type UserRegister,
@@ -11,8 +13,25 @@ import {
 import { handleError } from "@/utils"
 import useCustomToast from "./useCustomToast"
 
+const isDemoDomain = () => {
+  return (
+    typeof window !== "undefined" &&
+    window.location.hostname.startsWith("image.")
+  )
+}
+
 const isLoggedIn = () => {
+  if (isDemoDomain()) {
+    return false
+  }
   return localStorage.getItem("access_token") !== null
+}
+
+const isProtectedRoute = () => {
+  const pathname = window.location.pathname
+  return ["/admin", "/settings"].some(
+    (path) => pathname === path || pathname.startsWith(`${path}/`),
+  )
 }
 
 const useAuth = () => {
@@ -20,11 +39,28 @@ const useAuth = () => {
   const queryClient = useQueryClient()
   const { showErrorToast } = useCustomToast()
 
-  const { data: user } = useQuery<UserPublic | null, Error>({
+  const {
+    data: user,
+    error,
+    isError,
+  } = useQuery<UserPublic | null, Error>({
     queryKey: ["currentUser"],
     queryFn: UsersService.readUserMe,
     enabled: isLoggedIn(),
+    retry: false,
   })
+
+  useEffect(() => {
+    if (isError && error) {
+      if (error instanceof ApiError && [401, 403].includes(error.status)) {
+        localStorage.removeItem("access_token")
+        if (isProtectedRoute()) {
+          const redirectPath = isDemoDomain() ? "/" : "/login"
+          navigate({ to: redirectPath })
+        }
+      }
+    }
+  }, [isError, error, navigate])
 
   const signUpMutation = useMutation({
     mutationFn: (data: UserRegister) =>
@@ -66,5 +102,5 @@ const useAuth = () => {
   }
 }
 
-export { isLoggedIn }
+export { isDemoDomain, isLoggedIn }
 export default useAuth

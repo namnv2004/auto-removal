@@ -3,7 +3,41 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
+import type { InpaintingInpaintingStatusResponse, InpaintingRemoveObjectData, InpaintingRemoveObjectResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, SegmentationSegmentationStatusResponse, SegmentationPredictSegmentationData, SegmentationPredictSegmentationResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
+
+export class InpaintingService {
+    /**
+     * Inpainting Status
+     * @returns InpaintingStatusResponse Successful Response
+     * @throws ApiError
+     */
+    public static inpaintingStatus(): CancelablePromise<InpaintingInpaintingStatusResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/inpainting/status'
+        });
+    }
+    
+    /**
+     * Remove Object
+     * Remove the masked object using SD 3.5 Medium inpainting.
+     * @param data The data for the request.
+     * @param data.formData
+     * @returns InpaintingResponse Successful Response
+     * @throws ApiError
+     */
+    public static removeObject(data: InpaintingRemoveObjectData): CancelablePromise<InpaintingRemoveObjectResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/inpainting/remove',
+            formData: data.formData,
+            mediaType: 'multipart/form-data',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+}
 
 export class LoginService {
     /**
@@ -95,6 +129,39 @@ export class LoginService {
             path: {
                 email: data.email
             },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+}
+
+export class SegmentationService {
+    /**
+     * Segmentation Status
+     * @returns SegmentationStatus Successful Response
+     * @throws ApiError
+     */
+    public static segmentationStatus(): CancelablePromise<SegmentationSegmentationStatusResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/segmentation/status'
+        });
+    }
+    
+    /**
+     * Predict Segmentation
+     * @param data The data for the request.
+     * @param data.formData
+     * @returns SegmentationPredictResponse Successful Response
+     * @throws ApiError
+     */
+    public static predictSegmentation(data: SegmentationPredictSegmentationData): CancelablePromise<SegmentationPredictSegmentationResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/segmentation/predict',
+            formData: data.formData,
+            mediaType: 'multipart/form-data',
             errors: {
                 422: 'Validation Error'
             }

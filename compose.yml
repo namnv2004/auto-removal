@@ -1,10 +1,10 @@
-name: object-removal-demo
+name: object-removal
 
 x-backend-environment: &backend-environment
-  PROJECT_NAME: ${PROJECT_NAME:-Object Removal Demo}
+  PROJECT_NAME: ${PROJECT_NAME:-Object Removal}
   FRONTEND_HOST: ${FRONTEND_HOST:-http://${DOMAIN:-localhost}:${FRONTEND_PORT:-5173}}
   ENVIRONMENT: ${ENVIRONMENT:-local}
-  BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-http://localhost,http://localhost:${FRONTEND_PORT:-5173},http://${DOMAIN:-localhost},http://${DOMAIN:-localhost}:${FRONTEND_PORT:-5173},https://localhost,https://localhost:${FRONTEND_PORT:-5173},https://${DOMAIN:-localhost},https://${DOMAIN:-localhost}:${FRONTEND_PORT:-5173}}
+  BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-http://localhost,http://localhost:${FRONTEND_PORT:-5173},http://${DOMAIN:-localhost},http://${DOMAIN:-localhost}:${FRONTEND_PORT:-5173},https://localhost,https://localhost:${FRONTEND_PORT:-5173},https://${DOMAIN:-localhost},https://${DOMAIN:-localhost}:${FRONTEND_PORT:-5173},http://100.110.249.126:5173,http://100.110.249.126:5000}
   SECRET_KEY: ${SECRET_KEY:-changethis}
   FIRST_SUPERUSER: ${FIRST_SUPERUSER:-admin@example.com}
   FIRST_SUPERUSER_PASSWORD: ${FIRST_SUPERUSER_PASSWORD:-changethis}
@@ -21,6 +21,21 @@ x-backend-environment: &backend-environment
   POSTGRES_USER: ${POSTGRES_USER:-postgres}
   POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changethis}
   SENTRY_DSN: ${SENTRY_DSN:-}
+  MODEL_DEVICE: ${MODEL_DEVICE:-cuda}
+  SEGMENTATION_MODEL: ${SEGMENTATION_MODEL:-sam3.1}
+  MODEL_CACHE_DIR: /models
+  SAM31_CHECKPOINT_PATH: ${SAM31_CHECKPOINT_PATH:-/models/sam3.1_multiplex.pt}
+  MAX_IMAGE_MB: ${MAX_IMAGE_MB:-20}
+  MAX_LONG_EDGE: ${MAX_LONG_EDGE:-4096}
+  INPAINTING_MODEL: ${INPAINTING_MODEL:-jixin0101/ObjectClear}
+  INPAINTING_STEPS: ${INPAINTING_STEPS:-20}
+  INPAINTING_GUIDANCE_SCALE: ${INPAINTING_GUIDANCE_SCALE:-2.5}
+  INPAINTING_STRENGTH: ${INPAINTING_STRENGTH:-1.0}
+  MASK_DILATION_PX: ${MASK_DILATION_PX:-4}
+  MASK_FEATHER_RADIUS: ${MASK_FEATHER_RADIUS:-2.0}
+  HF_TOKEN: ${HF_TOKEN:-}
+  HF_HOME: /root/.cache/huggingface
+
 
 services:
   db:
@@ -31,8 +46,10 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-app}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changethis}
+    ports:
+      - "${DB_BIND_HOST:-127.0.0.1}:${DB_PORT:-5432}:5432"
     volumes:
-      - app-db-data:/var/lib/postgresql/data/pgdata
+      - app-db-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-app}"]
       interval: 10s
@@ -61,6 +78,8 @@ services:
       - 0.0.0.0
       - --port
       - "8000"
+      - --reload-dir
+      - app
       - app/main.py
     restart: unless-stopped
     depends_on:
@@ -71,18 +90,20 @@ services:
     environment:
       <<: *backend-environment
       WATCHFILES_FORCE_POLLING: ${WATCHFILES_FORCE_POLLING:-true}
+      NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-all}
+      NVIDIA_DRIVER_CAPABILITIES: ${NVIDIA_DRIVER_CAPABILITIES:-compute,utility}
     ports:
-      - "${BACKEND_BIND_HOST:-0.0.0.0}:${BACKEND_PORT:-8000}:8000"
+      - "${BACKEND_BIND_HOST:-0.0.0.0}:${BACKEND_PORT:-5000}:8000"
+    gpus: all
+    volumes:
+      - ${MODEL_DIR:-./models}:/models:ro
+      - ${HF_HOME:-./models/.cache}:/root/.cache/huggingface
+      - ./backend/app:/app/backend/app
+      - ./backend/scripts:/app/backend/scripts:ro
+      - ./backend/tests:/app/backend/tests
+      - ./backend/alembic.ini:/app/backend/alembic.ini:ro
     develop:
       watch:
-        - action: sync
-          path: ./backend
-          target: /app/backend
-          ignore:
-            - .pytest_cache/
-            - .ruff_cache/
-            - .venv/
-            - __pycache__/
         - action: rebuild
           path: ./backend/Dockerfile
         - action: rebuild
@@ -119,7 +140,8 @@ services:
       - --port
       - "5173"
     environment:
-      VITE_API_URL: ${VITE_API_URL:-http://${DOMAIN:-localhost}:${BACKEND_PORT:-8000}}
+      VITE_API_URL: ${VITE_API_URL:-}
+      VITE_BACKEND_PROXY_TARGET: ${VITE_BACKEND_PROXY_TARGET:-http://backend:8000}
       CHOKIDAR_USEPOLLING: ${CHOKIDAR_USEPOLLING:-true}
     restart: unless-stopped
     depends_on:
@@ -127,15 +149,13 @@ services:
         condition: service_healthy
     ports:
       - "${FRONTEND_BIND_HOST:-0.0.0.0}:${FRONTEND_PORT:-5173}:5173"
+    volumes:
+      - ./frontend/src:/app/frontend/src
+      - ./frontend/public:/app/frontend/public
+      - ./frontend/index.html:/app/frontend/index.html
+      - ./frontend/vite.config.ts:/app/frontend/vite.config.ts
     develop:
       watch:
-        - action: sync
-          path: ./frontend
-          target: /app/frontend
-          ignore:
-            - .vite/
-            - dist/
-            - node_modules/
         - action: rebuild
           path: ./frontend/Dockerfile
         - action: rebuild

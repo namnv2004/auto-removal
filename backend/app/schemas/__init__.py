@@ -1,0 +1,2 @@
+from .inpainting import InpaintingResponse, InpaintingStatusResponse
+from .segmentation import SegmentationPredictResponse, SegmentationStatus
